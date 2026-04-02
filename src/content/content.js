@@ -28,6 +28,7 @@ class ParchmentAssist {
         this.mutationObserver = null;
         this.choiceMode = false; // Toggle between Parser Mode and Choice Mode
         this.resizeSaveTimeout = null; // For debouncing resize saves
+        this._mergingQuests = false; // Mutex to prevent concurrent mergeQuests calls
 
         this.init();
     }
@@ -240,25 +241,19 @@ class ParchmentAssist {
             });
         });
 
-        this.commandPalette
-            .querySelector('#palette-refresh-btn')
-            .addEventListener('click', () => {
-                this.forceRefresh();
-            });
+        this.commandPalette.querySelector('#palette-refresh-btn').addEventListener('click', () => {
+            this.forceRefresh();
+        });
 
         // Clear journal button
-        this.commandPalette
-            .querySelector('#clear-journal-btn')
-            .addEventListener('click', () => {
-                this.clearJournal();
-            });
+        this.commandPalette.querySelector('#clear-journal-btn').addEventListener('click', () => {
+            this.clearJournal();
+        });
 
         // Mode toggle button
-        this.commandPalette
-            .querySelector('#palette-mode-toggle')
-            .addEventListener('click', () => {
-                this.toggleChoiceMode();
-            });
+        this.commandPalette.querySelector('#palette-mode-toggle').addEventListener('click', () => {
+            this.toggleChoiceMode();
+        });
 
         // Setup resize handle
         this.setupPaletteResize();
@@ -338,8 +333,12 @@ class ParchmentAssist {
                 pos2 = pos4 - e.clientY;
                 pos3 = e.clientX;
                 pos4 = e.clientY;
-                element.style.top = element.offsetTop - pos2 + 'px';
-                element.style.left = element.offsetLeft - pos1 + 'px';
+                const newTop = element.offsetTop - pos2;
+                const newLeft = element.offsetLeft - pos1;
+                const maxTop = window.innerHeight - element.offsetHeight;
+                const maxLeft = window.innerWidth - element.offsetWidth;
+                element.style.top = Math.min(Math.max(0, newTop), maxTop) + 'px';
+                element.style.left = Math.min(Math.max(0, newLeft), maxLeft) + 'px';
                 this.positionPalette();
             };
         };
@@ -411,7 +410,9 @@ class ParchmentAssist {
         };
 
         const doResize = (e) => {
-            if (!isResizing) return;
+            if (!isResizing) {
+                return;
+            }
 
             const delta = e.clientX - startX;
             const newWidth = startWidth - delta; // Subtract because handle is on left edge
@@ -424,7 +425,9 @@ class ParchmentAssist {
         };
 
         const stopResize = async () => {
-            if (!isResizing) return;
+            if (!isResizing) {
+                return;
+            }
 
             isResizing = false;
             resizeHandle.classList.remove('resizing');
@@ -522,7 +525,9 @@ class ParchmentAssist {
 
     updateModeToggleUI() {
         const toggleBtn = this.commandPalette?.querySelector('#palette-mode-toggle');
-        if (!toggleBtn) return;
+        if (!toggleBtn) {
+            return;
+        }
 
         const icon = toggleBtn.querySelector('.mode-icon');
         const text = toggleBtn.querySelector('.mode-text');
@@ -718,6 +723,10 @@ class ParchmentAssist {
     }
 
     async mergeQuests() {
+        if (this._mergingQuests) {
+            return;
+        }
+        this._mergingQuests = true;
         try {
             const gameTitle = this.rawGameState?.gameTitle || 'Unknown';
             const storageKey = `quests_${gameTitle}`;
@@ -735,12 +744,17 @@ class ParchmentAssist {
             newQuests.forEach((newQuest) => {
                 // Find if quest already exists (match by description)
                 const existingIndex = mergedQuests.findIndex(
-                    (q) => q.description.toLowerCase().trim() === newQuest.description.toLowerCase().trim()
+                    (q) =>
+                        q.description.toLowerCase().trim() ===
+                        newQuest.description.toLowerCase().trim()
                 );
 
                 if (existingIndex !== -1) {
                     // Quest exists - update status if changed to completed
-                    if (newQuest.status === 'completed' && mergedQuests[existingIndex].status !== 'completed') {
+                    if (
+                        newQuest.status === 'completed' &&
+                        mergedQuests[existingIndex].status !== 'completed'
+                    ) {
                         mergedQuests[existingIndex].status = 'completed';
                         this.log(`Quest completed: "${newQuest.description}"`);
                     }
@@ -761,6 +775,8 @@ class ParchmentAssist {
         } catch (error) {
             this.log('Error merging quests:', error);
             // Don't fail the whole update if quest merging fails
+        } finally {
+            this._mergingQuests = false;
         }
     }
 
@@ -812,9 +828,15 @@ class ParchmentAssist {
                 this.structuredGameState = response.structuredState;
                 this.npcProfiler.updateProfiles(this.structuredGameState.npcProfiles);
                 if (this.structuredGameState.mapData) {
-                    const lastCommand = this.commandHistory.length > 0
-                        ? this.commandHistory[this.commandHistory.length - 1] : null;
-                    this.mapManager.updateMap(this.structuredGameState.mapData, this.previousRoom, lastCommand);
+                    const lastCommand =
+                        this.commandHistory.length > 0
+                            ? this.commandHistory[this.commandHistory.length - 1]
+                            : null;
+                    this.mapManager.updateMap(
+                        this.structuredGameState.mapData,
+                        this.previousRoom,
+                        lastCommand
+                    );
                     this.renderMap();
                 }
                 this.previousRoom = this.structuredGameState.location;
@@ -864,10 +886,18 @@ class ParchmentAssist {
             const npcsSection = content.querySelector('#palette-npcs')?.parentElement;
             const exitsSection = content.querySelector('#palette-exits')?.parentElement;
 
-            if (verbsSection) verbsSection.style.display = 'none';
-            if (objectsSection) objectsSection.style.display = 'none';
-            if (npcsSection) npcsSection.style.display = 'none';
-            if (exitsSection) exitsSection.style.display = 'none';
+            if (verbsSection) {
+                verbsSection.style.display = 'none';
+            }
+            if (objectsSection) {
+                objectsSection.style.display = 'none';
+            }
+            if (npcsSection) {
+                npcsSection.style.display = 'none';
+            }
+            if (exitsSection) {
+                exitsSection.style.display = 'none';
+            }
 
             // Render choices prominently in a special section
             let choicesSection = content.querySelector('#palette-choices-section');
@@ -886,7 +916,10 @@ class ParchmentAssist {
                 }
             }
             choicesSection.style.display = 'block';
-            this.renderChoices(content.querySelector('#palette-choices'), state.suggestedActions || []);
+            this.renderChoices(
+                content.querySelector('#palette-choices'),
+                state.suggestedActions || []
+            );
         } else {
             // Parser Mode - show traditional sections, hide choices
             const verbsSection = content.querySelector('#palette-verbs')?.parentElement;
@@ -895,11 +928,21 @@ class ParchmentAssist {
             const exitsSection = content.querySelector('#palette-exits')?.parentElement;
             const choicesSection = content.querySelector('#palette-choices-section');
 
-            if (verbsSection) verbsSection.style.display = 'block';
-            if (objectsSection) objectsSection.style.display = 'block';
-            if (npcsSection) npcsSection.style.display = 'block';
-            if (exitsSection) exitsSection.style.display = 'block';
-            if (choicesSection) choicesSection.style.display = 'none';
+            if (verbsSection) {
+                verbsSection.style.display = 'block';
+            }
+            if (objectsSection) {
+                objectsSection.style.display = 'block';
+            }
+            if (npcsSection) {
+                npcsSection.style.display = 'block';
+            }
+            if (exitsSection) {
+                exitsSection.style.display = 'block';
+            }
+            if (choicesSection) {
+                choicesSection.style.display = 'none';
+            }
 
             this.renderList(
                 content.querySelector('#palette-verbs'),
@@ -958,7 +1001,9 @@ class ParchmentAssist {
         const seen = new Set();
         const uniqueItems = items.filter((item) => {
             const key = typeof item === 'object' ? JSON.stringify(item) : item;
-            if (seen.has(key)) return false;
+            if (seen.has(key)) {
+                return false;
+            }
             seen.add(key);
             return true;
         });
@@ -1211,21 +1256,35 @@ class ParchmentAssist {
     showError(message) {
         console.error('Error:', message);
 
-        // Create toast notification
+        // Create toast notification using DOM construction (no innerHTML) to prevent XSS
         const toast = document.createElement('div');
         toast.className = 'parchment-assist-toast parchment-assist-toast-error';
-        toast.innerHTML = `
-            <div class="toast-content">
-                <span class="toast-icon">⚠️</span>
-                <span class="toast-message">${message}</span>
-                <button class="toast-close" aria-label="Close">&times;</button>
-            </div>
-        `;
+
+        const toastContent = document.createElement('div');
+        toastContent.className = 'toast-content';
+
+        const icon = document.createElement('span');
+        icon.className = 'toast-icon';
+        icon.textContent = '⚠️';
+
+        const msg = document.createElement('span');
+        msg.className = 'toast-message';
+        msg.textContent = message;
+
+        const closeBtn = document.createElement('button');
+        closeBtn.className = 'toast-close';
+        closeBtn.setAttribute('aria-label', 'Close');
+        closeBtn.textContent = '×';
+
+        toastContent.appendChild(icon);
+        toastContent.appendChild(msg);
+        toastContent.appendChild(closeBtn);
+        toast.appendChild(toastContent);
 
         document.body.appendChild(toast);
 
         // Close button handler
-        toast.querySelector('.toast-close').addEventListener('click', () => {
+        closeBtn.addEventListener('click', () => {
             this.removeToast(toast);
         });
 
@@ -1243,25 +1302,37 @@ class ParchmentAssist {
     showStatus(message, type = 'success') {
         console.log('Status:', message);
 
-        // Create toast notification
+        // Create toast notification using DOM construction (no innerHTML) to prevent XSS
         const toast = document.createElement('div');
         const toastClass =
             type === 'success' ? 'parchment-assist-toast-success' : 'parchment-assist-toast-info';
         toast.className = `parchment-assist-toast ${toastClass}`;
 
-        const icon = type === 'success' ? '✓' : 'ℹ️';
-        toast.innerHTML = `
-            <div class="toast-content">
-                <span class="toast-icon">${icon}</span>
-                <span class="toast-message">${message}</span>
-                <button class="toast-close" aria-label="Close">&times;</button>
-            </div>
-        `;
+        const toastContent = document.createElement('div');
+        toastContent.className = 'toast-content';
+
+        const iconSpan = document.createElement('span');
+        iconSpan.className = 'toast-icon';
+        iconSpan.textContent = type === 'success' ? '✓' : 'ℹ️';
+
+        const msg = document.createElement('span');
+        msg.className = 'toast-message';
+        msg.textContent = message;
+
+        const closeBtn = document.createElement('button');
+        closeBtn.className = 'toast-close';
+        closeBtn.setAttribute('aria-label', 'Close');
+        closeBtn.textContent = '×';
+
+        toastContent.appendChild(iconSpan);
+        toastContent.appendChild(msg);
+        toastContent.appendChild(closeBtn);
+        toast.appendChild(toastContent);
 
         document.body.appendChild(toast);
 
         // Close button handler
-        toast.querySelector('.toast-close').addEventListener('click', () => {
+        closeBtn.addEventListener('click', () => {
             this.removeToast(toast);
         });
 
@@ -1297,15 +1368,18 @@ class ParchmentAssist {
             ]);
 
             // Check if Gemini is configured
-            const hasGemini = settings.activeProviders?.includes('gemini') &&
-                settings.geminiKey && settings.geminiKey.trim() !== '';
+            const hasGemini =
+                settings.activeProviders?.includes('gemini') &&
+                settings.geminiKey &&
+                settings.geminiKey.trim() !== '';
 
             // Check if Ollama is configured
             const hasOllama = settings.activeProviders?.includes('ollama');
 
             return {
                 configured: hasGemini || hasOllama,
-                provider: hasGemini && !settings.preferLocal ? 'gemini' : hasOllama ? 'ollama' : null,
+                provider:
+                    hasGemini && !settings.preferLocal ? 'gemini' : hasOllama ? 'ollama' : null,
                 hasGemini: hasGemini,
                 hasOllama: hasOllama,
             };
@@ -1430,7 +1504,10 @@ class ParchmentAssist {
             if (!currentStatus.configured) {
                 // Still not configured - open options page
                 chrome.runtime.openOptionsPage();
-                this.showStatus('Please configure an AI backend (Gemini or Ollama) to use Parchment-Assist', 'info');
+                this.showStatus(
+                    'Please configure an AI backend (Gemini or Ollama) to use Parchment-Assist',
+                    'info'
+                );
             } else {
                 // Configured - proceed with onboarding
                 closeOnboarding();
@@ -1442,7 +1519,10 @@ class ParchmentAssist {
                         this.bubble.setAttribute('aria-expanded', 'true');
                     }
                 }
-                this.showStatus(`AI configured successfully using ${currentStatus.provider === 'gemini' ? 'Gemini' : 'Ollama'}!`, 'success');
+                this.showStatus(
+                    `AI configured successfully using ${currentStatus.provider === 'gemini' ? 'Gemini' : 'Ollama'}!`,
+                    'success'
+                );
             }
         });
 
@@ -1471,7 +1551,10 @@ class ParchmentAssist {
         warningBadge.id = 'parchment-assist-config-warning';
         warningBadge.className = 'palette-config-warning';
         warningBadge.textContent = '⚙️';
-        warningBadge.setAttribute('aria-label', 'AI backend not configured - click to open settings');
+        warningBadge.setAttribute(
+            'aria-label',
+            'AI backend not configured - click to open settings'
+        );
         warningBadge.setAttribute('title', 'AI backend not configured');
 
         // Insert before the refresh button
@@ -1580,44 +1663,77 @@ class ParchmentAssist {
             roomCard.className = 'room-card';
             roomCard.setAttribute('role', 'listitem');
             roomCard.setAttribute('aria-label', `Room: ${roomName}`);
-            roomCard.innerHTML = `
-                <div class="room-header">
-                    <span class="room-name">${roomName}</span>
-                    <button class="delete-room-btn" data-room-name="${roomName}" aria-label="Delete ${roomName} from map">×</button>
-                </div>
-                <div class="room-details">
-                    <div class="room-items">
-                        <strong>Items:</strong>
-                        <ul>
-                            ${Array.isArray(room.items) ? room.items.map((item) => `<li>${item}</li>`).join('') : ''}
-                        </ul>
-                    </div>
-                    <div class="room-exits">
-                        <strong>Exits:</strong>
-                        <ul>
-                            ${
-                                Array.isArray(room.exits)
-                                    ? room.exits
-                                          .map((exit) => {
-                                              if (typeof exit === 'object' && exit.direction) {
-                                                  return `<li>${exit.direction} to ${exit.room || 'an unknown area'}</li>`;
-                                              }
-                                              return `<li>${exit}</li>`;
-                                          })
-                                          .join('')
-                                    : typeof room.exits === 'object' && room.exits !== null
-                                      ? Object.entries(room.exits)
-                                            .map(
-                                                ([direction, roomName]) =>
-                                                    `<li>${direction} to ${roomName}</li>`
-                                            )
-                                            .join('')
-                                      : ''
-                            }
-                        </ul>
-                    </div>
-                </div>
-            `;
+
+            // Room header (safe DOM construction — no innerHTML with AI-derived data)
+            const roomHeader = document.createElement('div');
+            roomHeader.className = 'room-header';
+
+            const roomNameSpan = document.createElement('span');
+            roomNameSpan.className = 'room-name';
+            roomNameSpan.textContent = roomName;
+
+            const deleteBtn = document.createElement('button');
+            deleteBtn.className = 'delete-room-btn';
+            deleteBtn.dataset.roomName = roomName;
+            deleteBtn.setAttribute('aria-label', `Delete ${roomName} from map`);
+            deleteBtn.textContent = '×';
+            deleteBtn.addEventListener('click', () => {
+                this.mapManager.deleteRoom(roomName);
+                this.renderMap();
+            });
+
+            roomHeader.appendChild(roomNameSpan);
+            roomHeader.appendChild(deleteBtn);
+
+            // Room details
+            const roomDetails = document.createElement('div');
+            roomDetails.className = 'room-details';
+
+            const roomItemsDiv = document.createElement('div');
+            roomItemsDiv.className = 'room-items';
+            const itemsLabel = document.createElement('strong');
+            itemsLabel.textContent = 'Items:';
+            const itemsList = document.createElement('ul');
+            if (Array.isArray(room.items)) {
+                room.items.forEach((item) => {
+                    const li = document.createElement('li');
+                    li.textContent = item;
+                    itemsList.appendChild(li);
+                });
+            }
+            roomItemsDiv.appendChild(itemsLabel);
+            roomItemsDiv.appendChild(itemsList);
+
+            const roomExitsDiv = document.createElement('div');
+            roomExitsDiv.className = 'room-exits';
+            const exitsLabel = document.createElement('strong');
+            exitsLabel.textContent = 'Exits:';
+            const exitsList = document.createElement('ul');
+            if (Array.isArray(room.exits)) {
+                room.exits.forEach((exit) => {
+                    const li = document.createElement('li');
+                    if (typeof exit === 'object' && exit.direction) {
+                        li.textContent = `${exit.direction} to ${exit.room || 'an unknown area'}`;
+                    } else {
+                        li.textContent = exit;
+                    }
+                    exitsList.appendChild(li);
+                });
+            } else if (typeof room.exits === 'object' && room.exits !== null) {
+                Object.entries(room.exits).forEach(([direction, dest]) => {
+                    const li = document.createElement('li');
+                    li.textContent = `${direction} to ${dest}`;
+                    exitsList.appendChild(li);
+                });
+            }
+            roomExitsDiv.appendChild(exitsLabel);
+            roomExitsDiv.appendChild(exitsList);
+
+            roomDetails.appendChild(roomItemsDiv);
+            roomDetails.appendChild(roomExitsDiv);
+
+            roomCard.appendChild(roomHeader);
+            roomCard.appendChild(roomDetails);
             roomListContainer.appendChild(roomCard);
         }
     }
@@ -1662,35 +1778,56 @@ class ParchmentAssist {
                     ? profile.dialogue[0]
                     : 'No dialogue recorded';
 
-            profileCard.innerHTML = `
-                <div class="profile-header">
-                    <span class="profile-name">👤 ${npcName}</span>
-                </div>
-                <div class="profile-details">
-                    <div class="profile-location">
-                        <strong>📍 Location:</strong> ${profile.location || 'Unknown'}
-                    </div>
-                    ${
-                        profile.description
-                            ? `<div class="profile-description">
-                        <strong>Description:</strong> ${profile.description}
-                    </div>`
-                            : ''
-                    }
-                    <div class="profile-dialogue-preview">
-                        <strong>💬 Recent:</strong> "${dialoguePreview}"
-                    </div>
-                    <button class="profile-view-btn" data-npc-name="${npcName}">View Full Profile</button>
-                </div>
-            `;
+            // Safe DOM construction — no innerHTML with AI-derived data
+            const profileHeader = document.createElement('div');
+            profileHeader.className = 'profile-header';
+            const profileNameSpan = document.createElement('span');
+            profileNameSpan.className = 'profile-name';
+            profileNameSpan.textContent = `👤 ${npcName}`;
+            profileHeader.appendChild(profileNameSpan);
 
-            profilesContainer.appendChild(profileCard);
+            const profileDetails = document.createElement('div');
+            profileDetails.className = 'profile-details';
 
-            // Add event listener to view button
-            const viewBtn = profileCard.querySelector('.profile-view-btn');
+            const locationDiv = document.createElement('div');
+            locationDiv.className = 'profile-location';
+            const locationLabel = document.createElement('strong');
+            locationLabel.textContent = '📍 Location:';
+            locationDiv.appendChild(locationLabel);
+            locationDiv.append(` ${profile.location || 'Unknown'}`);
+
+            profileDetails.appendChild(locationDiv);
+
+            if (profile.description) {
+                const descDiv = document.createElement('div');
+                descDiv.className = 'profile-description';
+                const descLabel = document.createElement('strong');
+                descLabel.textContent = 'Description:';
+                descDiv.appendChild(descLabel);
+                descDiv.append(` ${profile.description}`);
+                profileDetails.appendChild(descDiv);
+            }
+
+            const dialogueDiv = document.createElement('div');
+            dialogueDiv.className = 'profile-dialogue-preview';
+            const dialogueLabel = document.createElement('strong');
+            dialogueLabel.textContent = '💬 Recent:';
+            dialogueDiv.appendChild(dialogueLabel);
+            dialogueDiv.append(` "${dialoguePreview}"`);
+            profileDetails.appendChild(dialogueDiv);
+
+            const viewBtn = document.createElement('button');
+            viewBtn.className = 'profile-view-btn';
+            viewBtn.dataset.npcName = npcName;
+            viewBtn.textContent = 'View Full Profile';
             viewBtn.addEventListener('click', () => {
                 this.showNpcProfile(npcName);
             });
+            profileDetails.appendChild(viewBtn);
+
+            profileCard.appendChild(profileHeader);
+            profileCard.appendChild(profileDetails);
+            profilesContainer.appendChild(profileCard);
         });
     }
 
@@ -1710,23 +1847,39 @@ class ParchmentAssist {
         const actionsContent = palette.querySelector('#actions-tab-content');
         const profilesContent = palette.querySelector('#profiles-tab-content');
 
-        if (mainContent) mainContent.style.display = 'none';
-        if (mapContent) mapContent.style.display = 'none';
-        if (actionsContent) actionsContent.style.display = 'none';
-        if (profilesContent) profilesContent.style.display = 'none';
+        if (mainContent) {
+            mainContent.style.display = 'none';
+        }
+        if (mapContent) {
+            mapContent.style.display = 'none';
+        }
+        if (actionsContent) {
+            actionsContent.style.display = 'none';
+        }
+        if (profilesContent) {
+            profilesContent.style.display = 'none';
+        }
 
         // Show selected tab content
         if (tabName === 'map') {
-            if (mapContent) mapContent.style.display = 'block';
+            if (mapContent) {
+                mapContent.style.display = 'block';
+            }
             this.renderMap();
         } else if (tabName === 'actions') {
-            if (actionsContent) actionsContent.style.display = 'block';
+            if (actionsContent) {
+                actionsContent.style.display = 'block';
+            }
         } else if (tabName === 'profiles') {
-            if (profilesContent) profilesContent.style.display = 'block';
+            if (profilesContent) {
+                profilesContent.style.display = 'block';
+            }
             this.renderProfiles();
         } else {
             // Default to main tab
-            if (mainContent) mainContent.style.display = 'block';
+            if (mainContent) {
+                mainContent.style.display = 'block';
+            }
         }
     }
 

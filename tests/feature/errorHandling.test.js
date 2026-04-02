@@ -417,6 +417,166 @@ describe('Error Handling', () => {
         });
     });
 
+    describe('XSS Prevention in Toasts', () => {
+        let assist;
+
+        beforeEach(() => {
+            document.body.innerHTML = `
+        <div id="gameport"><div class="BufferLine">Test</div></div>
+        <input type="text" id="input" />
+      `;
+            assist = new ParchmentAssist();
+        });
+
+        afterEach(() => {
+            document.body.innerHTML = '';
+        });
+
+        test('showError should render XSS payload as text, not HTML', () => {
+            const xssPayload = '<img src=x onerror="window.__xss=true">';
+            assist.showError(xssPayload);
+
+            const toast = document.querySelector('.parchment-assist-toast-error');
+            expect(toast).not.toBeNull();
+
+            // Message text should be the raw payload string, not executed HTML
+            const msgEl = toast.querySelector('.toast-message');
+            expect(msgEl.textContent).toBe(xssPayload);
+
+            // No <img> should be injected
+            expect(toast.querySelector('img')).toBeNull();
+            expect(window.__xss).toBeUndefined();
+        });
+
+        test('showStatus should render XSS payload as text, not HTML', () => {
+            const xssPayload = '<script>window.__xss2=true</script>';
+            assist.showStatus(xssPayload);
+
+            const toast = document.querySelector('.parchment-assist-toast-success');
+            expect(toast).not.toBeNull();
+
+            const msgEl = toast.querySelector('.toast-message');
+            expect(msgEl.textContent).toBe(xssPayload);
+
+            expect(toast.querySelector('script')).toBeNull();
+            expect(window.__xss2).toBeUndefined();
+        });
+    });
+
+    describe('XSS Prevention in Map Rendering', () => {
+        let assist;
+
+        beforeEach(() => {
+            document.body.innerHTML = `
+        <div id="gameport"><div class="BufferLine">Test</div></div>
+        <input type="text" id="input" />
+        <div id="room-list"></div>
+      `;
+            assist = new ParchmentAssist();
+        });
+
+        afterEach(() => {
+            document.body.innerHTML = '';
+        });
+
+        test('renderMap should escape XSS in room names', () => {
+            const xssRoomName = '<img src=x onerror="window.__xssMap=true">';
+            assist.mapManager.addRoom(xssRoomName, { items: [], exits: [] });
+            assist.renderMap();
+
+            const roomList = document.getElementById('room-list');
+            expect(roomList.querySelector('img')).toBeNull();
+            expect(window.__xssMap).toBeUndefined();
+            // Room name rendered as text
+            const nameEl = roomList.querySelector('.room-name');
+            expect(nameEl.textContent).toBe(xssRoomName);
+        });
+
+        test('renderMap should escape XSS in item names', () => {
+            const xssItem = '<script>window.__xssItem=true</script>';
+            assist.mapManager.addRoom('Safe Room', { items: [xssItem], exits: [] });
+            assist.renderMap();
+
+            const roomList = document.getElementById('room-list');
+            expect(roomList.querySelector('script')).toBeNull();
+            expect(window.__xssItem).toBeUndefined();
+            const li = roomList.querySelector('.room-items li');
+            expect(li.textContent).toBe(xssItem);
+        });
+
+        test('delete room button removes room from display', () => {
+            assist.mapManager.addRoom('Room A', { items: [], exits: [] });
+            assist.mapManager.addRoom('Room B', { items: [], exits: [] });
+            assist.renderMap();
+
+            const deleteBtn = document.querySelector('.delete-room-btn[data-room-name="Room A"]');
+            expect(deleteBtn).not.toBeNull();
+            deleteBtn.click();
+
+            const roomList = document.getElementById('room-list');
+            const roomNames = [...roomList.querySelectorAll('.room-name')].map(
+                (el) => el.textContent
+            );
+            expect(roomNames).not.toContain('Room A');
+            expect(roomNames).toContain('Room B');
+        });
+    });
+
+    describe('XSS Prevention in Profile Rendering', () => {
+        let assist;
+
+        beforeEach(() => {
+            document.body.innerHTML = `
+        <div id="gameport"><div class="BufferLine">Test</div></div>
+        <input type="text" id="input" />
+        <div id="palette-profiles"></div>
+      `;
+            assist = new ParchmentAssist();
+        });
+
+        afterEach(() => {
+            document.body.innerHTML = '';
+        });
+
+        test('renderProfiles should escape XSS in NPC names', () => {
+            const xssName = '<img src=x onerror="window.__xssProfile=true">';
+            assist.npcProfiler.updateProfiles({
+                [xssName]: { location: 'Town', description: 'A person', dialogue: ['Hello'] },
+            });
+            assist.renderProfiles();
+
+            const container = document.getElementById('palette-profiles');
+            expect(container.querySelector('img')).toBeNull();
+            expect(window.__xssProfile).toBeUndefined();
+            const nameEl = container.querySelector('.profile-name');
+            expect(nameEl.textContent).toContain(xssName);
+        });
+
+        test('renderProfiles should escape XSS in NPC location', () => {
+            const xssLocation = '<script>window.__xssLoc=true</script>';
+            assist.npcProfiler.updateProfiles({
+                Villager: { location: xssLocation, dialogue: [] },
+            });
+            assist.renderProfiles();
+
+            const container = document.getElementById('palette-profiles');
+            expect(container.querySelector('script')).toBeNull();
+            expect(window.__xssLoc).toBeUndefined();
+        });
+
+        test('renderProfiles should escape XSS in NPC description', () => {
+            const xssDesc = '<img src=x onerror="window.__xssDesc=true">';
+            assist.npcProfiler.updateProfiles({
+                Guard: { location: 'Gate', description: xssDesc, dialogue: [] },
+            });
+            assist.renderProfiles();
+
+            const container = document.getElementById('palette-profiles');
+            expect(container.querySelector('img')).toBeNull();
+            expect(window.__xssDesc).toBeUndefined();
+        });
+    });
+
     describe('Memory and Resource Management', () => {
         test('should not leak event listeners on multiple renderList calls', () => {
             const assist = new ParchmentAssist();

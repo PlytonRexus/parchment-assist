@@ -265,8 +265,16 @@ describe('UI Rendering', () => {
 
         test('should render NPC profiles in Profiles tab', () => {
             assist.npcProfiler.updateProfiles({
-                Gandalf: { description: 'A wizard', location: 'Rivendell', dialogue: ['You shall not pass!'] },
-                Frodo: { description: 'A hobbit', location: 'Shire', dialogue: ['I will take the ring'] },
+                Gandalf: {
+                    description: 'A wizard',
+                    location: 'Rivendell',
+                    dialogue: ['You shall not pass!'],
+                },
+                Frodo: {
+                    description: 'A hobbit',
+                    location: 'Shire',
+                    dialogue: ['I will take the ring'],
+                },
             });
 
             // Switch to Profiles tab to render profiles

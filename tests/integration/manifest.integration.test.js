@@ -68,9 +68,7 @@ describe('Manifest Configuration', () => {
         test('should match iplayif.com', () => {
             const contentScript = manifest.content_scripts[0];
             expect(contentScript.matches).toEqual(
-                expect.arrayContaining([
-                    expect.stringContaining('iplayif.com'),
-                ])
+                expect.arrayContaining([expect.stringContaining('iplayif.com')])
             );
         });
     });
@@ -98,6 +96,37 @@ describe('Manifest Configuration', () => {
             expect(manifest.host_permissions).toContain(
                 'https://generativelanguage.googleapis.com/*'
             );
+        });
+
+        test('should NOT have overly broad https://*/* permission', () => {
+            expect(manifest.host_permissions).not.toContain('https://*/*');
+        });
+    });
+
+    describe('Security Hardening', () => {
+        test('web_accessible_resources should NOT use <all_urls>', () => {
+            manifest.web_accessible_resources.forEach((entry) => {
+                expect(entry.matches).not.toContain('<all_urls>');
+            });
+        });
+
+        test('web_accessible_resources matches should be scoped to iplayif.com', () => {
+            const entry = manifest.web_accessible_resources[0];
+            entry.matches.forEach((pattern) => {
+                expect(pattern).toMatch(/iplayif\.com/);
+            });
+        });
+
+        test('should define a content_security_policy', () => {
+            expect(manifest.content_security_policy).toBeDefined();
+        });
+
+        test('CSP extension_pages should restrict script-src to self', () => {
+            expect(manifest.content_security_policy.extension_pages).toContain("script-src 'self'");
+        });
+
+        test('CSP extension_pages should disallow object-src', () => {
+            expect(manifest.content_security_policy.extension_pages).toContain("object-src 'none'");
         });
     });
 

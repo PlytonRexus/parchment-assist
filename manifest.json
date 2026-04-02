@@ -7,8 +7,7 @@
   "host_permissions": [
     "http://localhost:11434/*",
     "https://generativelanguage.googleapis.com/*",
-    "https://iplayif.com/*",
-    "https://*/*"
+    "https://iplayif.com/*"
   ],
   "background": {
     "service_worker": "src/background/service-worker.js",
@@ -41,7 +40,10 @@
         "src/lib/npc.js",
         "src/lib/mapManager.js"
       ],
-      "matches": ["<all_urls>"]
+      "matches": ["https://iplayif.com/*", "http://iplayif.com/*"]
     }
-  ]
+  ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'none'"
+  }
 }

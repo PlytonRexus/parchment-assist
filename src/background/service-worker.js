@@ -291,11 +291,12 @@ Analyze the text and return a JSON object with ALL of the following fields: "loc
 
         try {
             const response = await fetch(
-                `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${this.settings.geminiKey}`,
+                'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent',
                 {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
+                        'x-goog-api-key': this.settings.geminiKey,
                     },
                     body: JSON.stringify({
                         contents: [

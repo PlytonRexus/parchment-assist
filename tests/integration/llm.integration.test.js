@@ -365,6 +365,65 @@ That's the analysis.`;
         });
     });
 
+    describe('Gemini API Key Security', () => {
+        let fetchCalls;
+        let originalFetch;
+
+        beforeEach(() => {
+            fetchCalls = [];
+            originalFetch = globalThis.fetch;
+            globalThis.fetch = async (url, options) => {
+                fetchCalls.push({ url: url.toString(), options });
+                // Return a minimal valid Gemini response
+                return {
+                    ok: true,
+                    json: async () => ({
+                        candidates: [
+                            {
+                                content: {
+                                    parts: [
+                                        {
+                                            text: '{"location":"","inventory":[],"objects":[],"npcs":[],"exits":[],"verbs":[],"quests":[],"suggestedActions":[],"npcProfiles":{},"mapData":{"roomName":"","exits":[]}}',
+                                        },
+                                    ],
+                                },
+                            },
+                        ],
+                    }),
+                };
+            };
+            llmService.settings.geminiKey = 'test-secret-key-abc123';
+        });
+
+        afterEach(() => {
+            globalThis.fetch = originalFetch;
+        });
+
+        test('Gemini fetch URL should NOT contain the API key', async () => {
+            await llmService.tryGemini(
+                'test prompt',
+                llmService.parseStateResponse.bind(llmService)
+            );
+
+            expect(fetchCalls.length).toBeGreaterThan(0);
+            fetchCalls.forEach(({ url }) => {
+                expect(url).not.toContain('test-secret-key-abc123');
+                expect(url).not.toContain('key=');
+            });
+        });
+
+        test('Gemini fetch should send API key in x-goog-api-key header', async () => {
+            await llmService.tryGemini(
+                'test prompt',
+                llmService.parseStateResponse.bind(llmService)
+            );
+
+            expect(fetchCalls.length).toBeGreaterThan(0);
+            const { options } = fetchCalls[0];
+            expect(options.headers['x-goog-api-key']).toBe('test-secret-key-abc123');
+        });
+    });
+
     describe('Structured State Extraction', () => {
         test('should create default mapData if missing from provider response', async () => {
             const gameState = {
