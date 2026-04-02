@@ -1,0 +1,182 @@
+name: 🐛 Bug Report
+description: Report a bug or unexpected behavior
+title: "[Bug]: "
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report this bug! Please fill out the form below to help us investigate.
+
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: Preflight Checklist
+      description: Please ensure you've completed all of the following.
+      options:
+        - label: I have searched existing issues and discussions to avoid duplicates
+          required: true
+        - label: I have read the [FAQ](https://github.com/PlytonRexus/parchment-assist/blob/main/FAQ.md)
+          required: true
+        - label: I am using the latest version of Parchment-Assist
+          required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Bug Description
+      description: A clear and concise description of what the bug is.
+      placeholder: When I click on a command suggestion, the game...
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to Reproduce
+      description: Provide detailed steps to reproduce the issue.
+      placeholder: |
+        1. Go to iplayif.com
+        2. Start game 'Zork I'
+        3. Click on the suggestion 'EXAMINE MAILBOX'
+        4. See error...
+      value: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: What did you expect to happen?
+      placeholder: The command should be executed in the game...
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual Behavior
+      description: What actually happened?
+      placeholder: Instead, I see an error message...
+    validations:
+      required: true
+
+  - type: dropdown
+    id: browser
+    attributes:
+      label: Browser
+      description: Which browser are you using?
+      options:
+        - Chrome
+        - Edge
+        - Brave
+        - Opera
+        - Other Chromium-based
+    validations:
+      required: true
+
+  - type: input
+    id: browser-version
+    attributes:
+      label: Browser Version
+      description: What version of the browser? (e.g., 120.0.6099.109)
+      placeholder: "120.0.6099.109"
+    validations:
+      required: true
+
+  - type: input
+    id: extension-version
+    attributes:
+      label: Extension Version
+      description: What version of Parchment-Assist? (Check chrome://extensions/)
+      placeholder: "1.0.0"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: ai-backend
+    attributes:
+      label: AI Backend
+      description: Which AI backend were you using?
+      options:
+        - Ollama (local)
+        - Google Gemini (cloud)
+        - Both (hybrid mode)
+        - None (regex fallback)
+        - Not sure
+    validations:
+      required: true
+
+  - type: input
+    id: ollama-version
+    attributes:
+      label: Ollama Version (if applicable)
+      description: What version of Ollama? (Run `ollama --version`)
+      placeholder: "0.1.17"
+    validations:
+      required: false
+
+  - type: input
+    id: ollama-model
+    attributes:
+      label: Ollama Model (if applicable)
+      description: Which model? (e.g., llama3, mistral)
+      placeholder: "llama3"
+    validations:
+      required: false
+
+  - type: input
+    id: game-url
+    attributes:
+      label: Game URL
+      description: Which game/website were you playing?
+      placeholder: "https://iplayif.com/?story=https://..."
+    validations:
+      required: false
+
+  - type: textarea
+    id: console-errors
+    attributes:
+      label: Console Errors
+      description: |
+        Open browser DevTools (F12), check the Console tab for errors.
+        Copy/paste any relevant error messages here.
+      placeholder: |
+        TypeError: Cannot read property 'textContent' of null
+          at ParchmentAssist.extractRawGameState (content.js:123)
+      render: shell
+    validations:
+      required: false
+
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots
+      description: If applicable, add screenshots to help explain the problem.
+      placeholder: Drag and drop images here or paste from clipboard
+    validations:
+      required: false
+
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional Context
+      description: Add any other context about the problem here.
+      placeholder: This started happening after I updated to version X.X.X...
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: impact
+    attributes:
+      label: Impact
+      description: How does this bug affect you?
+      options:
+        - label: This completely blocks me from using the extension
+        - label: This causes occasional errors but I can work around it
+        - label: This is a minor inconvenience
+        - label: This is a visual/cosmetic issue

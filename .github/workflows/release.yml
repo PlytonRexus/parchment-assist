@@ -1,0 +1,266 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., 1.2.3)'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    name: Validate Release
+    runs-on: ubuntu-latest
+
+    outputs:
+      version: ${{ steps.get-version.outputs.version }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Get version
+        id: get-version
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            VERSION=${GITHUB_REF#refs/tags/v}
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Version: $VERSION"
+
+      - name: Validate version format
+        run: |
+          VERSION="${{ steps.get-version.outputs.version }}"
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9]+(\.[0-9]+)?)?$ ]]; then
+            echo "::error::Invalid version format: $VERSION"
+            echo "Expected format: X.Y.Z or X.Y.Z-alpha.N"
+            exit 1
+          fi
+
+      - name: Check version in package.json
+        run: |
+          PACKAGE_VERSION=$(node -p "require('./package.json').version")
+          RELEASE_VERSION="${{ steps.get-version.outputs.version }}"
+
+          if [ "$PACKAGE_VERSION" != "$RELEASE_VERSION" ]; then
+            echo "::error::Version mismatch!"
+            echo "package.json: $PACKAGE_VERSION"
+            echo "Release tag: $RELEASE_VERSION"
+            exit 1
+          fi
+
+          echo "✓ Version matches package.json"
+
+      - name: Check version in manifest.json
+        run: |
+          MANIFEST_VERSION=$(node -p "require('./manifest.json').version")
+          RELEASE_VERSION="${{ steps.get-version.outputs.version }}"
+
+          if [ "$MANIFEST_VERSION" != "$RELEASE_VERSION" ]; then
+            echo "::error::Version mismatch!"
+            echo "manifest.json: $MANIFEST_VERSION"
+            echo "Release tag: $RELEASE_VERSION"
+            exit 1
+          fi
+
+          echo "✓ Version matches manifest.json"
+
+      - name: Check CHANGELOG entry
+        run: |
+          VERSION="${{ steps.get-version.outputs.version }}"
+          if ! grep -q "## \[$VERSION\]" CHANGELOG.md; then
+            echo "::warning::No CHANGELOG entry found for version $VERSION"
+          else
+            echo "✓ CHANGELOG entry exists"
+          fi
+
+  build:
+    name: Build Release Package
+    runs-on: ubuntu-latest
+    needs: validate
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run all quality checks
+        run: npm run validate
+
+      - name: Run tests with coverage
+        run: npm run test:coverage -- --ci
+
+      - name: Create distribution directory
+        run: |
+          mkdir -p dist
+
+          # Copy essential files
+          cp manifest.json dist/
+          cp LICENSE dist/
+          cp README.md dist/
+
+          # Copy source directories
+          cp -r src dist/
+          cp -r patches dist/
+
+          echo "✓ Distribution directory created"
+
+      - name: Create ZIP package
+        run: |
+          cd dist
+          VERSION="${{ needs.validate.outputs.version }}"
+          ZIP_NAME="parchment-assist-v${VERSION}.zip"
+          zip -r "../${ZIP_NAME}" .
+          cd ..
+
+          # Verify ZIP was created
+          if [ ! -f "$ZIP_NAME" ]; then
+            echo "::error::Failed to create ZIP package"
+            exit 1
+          fi
+
+          echo "ZIP_NAME=$ZIP_NAME" >> $GITHUB_ENV
+          echo "✓ Created package: $ZIP_NAME"
+
+      - name: Calculate checksums
+        run: |
+          sha256sum "$ZIP_NAME" > "${ZIP_NAME}.sha256"
+          echo "✓ Checksum calculated"
+
+      - name: Upload package artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-package
+          path: |
+            ${{ env.ZIP_NAME }}
+            ${{ env.ZIP_NAME }}.sha256
+          retention-days: 90
+
+  create-release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    needs: [validate, build]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download package artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: release-package
+          path: ./release-artifacts
+
+      - name: Extract CHANGELOG for this version
+        id: changelog
+        run: |
+          VERSION="${{ needs.validate.outputs.version }}"
+
+          # Extract the relevant section from CHANGELOG.md
+          if grep -q "## \[$VERSION\]" CHANGELOG.md; then
+            # Extract content between this version and the next version header
+            NOTES=$(sed -n "/## \[$VERSION\]/,/## \[/p" CHANGELOG.md | sed '1d;$d')
+            echo "Found changelog notes for version $VERSION"
+          else
+            NOTES="Release version $VERSION
+
+See [CHANGELOG.md](https://github.com/PlytonRexus/parchment-assist/blob/main/CHANGELOG.md) for details."
+            echo "No changelog entry found, using default notes"
+          fi
+
+          # Save to file for multi-line content
+          echo "$NOTES" > release-notes.md
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ needs.validate.outputs.version }}
+          name: v${{ needs.validate.outputs.version }}
+          body_path: release-notes.md
+          draft: false
+          prerelease: ${{ contains(needs.validate.outputs.version, '-') }}
+          files: |
+            release-artifacts/*.zip
+            release-artifacts/*.sha256
+          fail_on_unmatched_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create release summary
+        run: |
+          VERSION="${{ needs.validate.outputs.version }}"
+          echo "## 🎉 Release v${VERSION} Published!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📦 Assets" >> $GITHUB_STEP_SUMMARY
+          echo "- \`parchment-assist-v${VERSION}.zip\` - Extension package" >> $GITHUB_STEP_SUMMARY
+          echo "- \`parchment-assist-v${VERSION}.zip.sha256\` - Checksum file" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🔗 Links" >> $GITHUB_STEP_SUMMARY
+          echo "- [Release Page](https://github.com/PlytonRexus/parchment-assist/releases/tag/v${VERSION})" >> $GITHUB_STEP_SUMMARY
+          echo "- [Changelog](https://github.com/PlytonRexus/parchment-assist/blob/main/CHANGELOG.md)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📝 Next Steps" >> $GITHUB_STEP_SUMMARY
+          echo "1. Download the ZIP package from the release" >> $GITHUB_STEP_SUMMARY
+          echo "2. Test the package locally" >> $GITHUB_STEP_SUMMARY
+          echo "3. Submit to Chrome Web Store (see [docs/DEPLOYMENT.md](https://github.com/PlytonRexus/parchment-assist/blob/main/docs/DEPLOYMENT.md))" >> $GITHUB_STEP_SUMMARY
+
+  notify:
+    name: Post-Release Notifications
+    runs-on: ubuntu-latest
+    needs: [validate, create-release]
+    if: success()
+
+    steps:
+      - name: Release completed
+        run: |
+          VERSION="${{ needs.validate.outputs.version }}"
+          echo "✅ Release v${VERSION} completed successfully!"
+          echo "🎉 Extension package is ready for Chrome Web Store submission"
+
+      - name: Create announcement template
+        run: |
+          VERSION="${{ needs.validate.outputs.version }}"
+          cat << EOF > announcement.md
+          📢 **Parchment-Assist v${VERSION} Released!**
+
+          We're excited to announce the release of Parchment-Assist v${VERSION}!
+
+          ## What's New
+          See the [full changelog](https://github.com/PlytonRexus/parchment-assist/blob/main/CHANGELOG.md#${VERSION//.}) for details.
+
+          ## Download
+          - [Chrome Web Store](https://chrome.google.com/webstore) (coming soon)
+          - [GitHub Releases](https://github.com/PlytonRexus/parchment-assist/releases/tag/v${VERSION})
+
+          ## Feedback
+          Please report any issues on our [GitHub Issues](https://github.com/PlytonRexus/parchment-assist/issues) page.
+
+          Happy adventuring! 🎮✨
+          EOF
+
+          echo "📝 Announcement template created in announcement.md"
+          cat announcement.md
+
+      - name: Upload announcement
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-announcement
+          path: announcement.md
+          retention-days: 30

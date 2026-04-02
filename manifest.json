@@ -1,0 +1,47 @@
+{
+  "manifest_version": 3,
+  "name": "Parchment-Assist",
+  "version": "1.0.0",
+  "description": "Adds clickable command suggestions to Z-machine games in Parchment using AI",
+  "permissions": ["storage", "scripting", "activeTab"],
+  "host_permissions": [
+    "http://localhost:11434/*",
+    "https://generativelanguage.googleapis.com/*",
+    "https://iplayif.com/*",
+    "https://*/*"
+  ],
+  "background": {
+    "service_worker": "src/background/service-worker.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://iplayif.com/*", "http://iplayif.com/*"],
+      "js": ["src/content/content-loader.js"],
+      "css": ["src/ui/ui.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "options_page": "src/ui/options.html",
+  "icons": {
+    "16": "src/assets/icons/icon16.png",
+    "32": "src/assets/icons/icon32.png",
+    "48": "src/assets/icons/icon48.png",
+    "128": "src/assets/icons/icon128.png"
+  },
+  "action": {
+    "default_popup": "src/ui/popup.html",
+    "default_title": "Parchment-Assist"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "src/content/content.js",
+        "src/helpers/htmlCleaner.js",
+        "src/lib/npc.js",
+        "src/lib/mapManager.js"
+      ],
+      "matches": ["<all_urls>"]
+    }
+  ]
+}

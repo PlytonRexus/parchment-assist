@@ -1,0 +1,51 @@
+{
+  "name": "parchment-assist",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "AI-powered command suggestions for Z-machine interactive fiction games running in the Parchment web player",
+  "keywords": [
+    "chrome-extension",
+    "interactive-fiction",
+    "z-machine",
+    "parchment",
+    "ai",
+    "llm",
+    "ollama",
+    "gemini",
+    "text-adventure",
+    "parser-games"
+  ],
+  "author": "Parchment-Assist Contributors",
+  "license": "MIT",
+  "homepage": "https://github.com/PlytonRexus/parchment-assist#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/PlytonRexus/parchment-assist.git"
+  },
+  "bugs": {
+    "url": "https://github.com/PlytonRexus/parchment-assist/issues"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
+  },
+  "scripts": {
+    "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
+    "test:watch": "npm test -- --watch",
+    "test:coverage": "npm test -- --coverage",
+    "lint": "eslint \"**/*.js\" --ignore-pattern \"node_modules/**\"",
+    "lint:fix": "eslint \"**/*.js\" --fix --ignore-pattern \"node_modules/**\"",
+    "format": "prettier --write \"**/*.{js,json,md,html,css}\"",
+    "format:check": "prettier --check \"**/*.{js,json,md,html,css}\"",
+    "validate": "npm run lint && npm run format:check && npm test"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.1",
+    "eslint": "^9.39.1",
+    "eslint-plugin-jest": "^29.1.0",
+    "globals": "^16.5.0",
+    "jest": "^30.0.5",
+    "jest-environment-jsdom": "^30.0.5",
+    "prettier": "^3.6.2"
+  }
+}

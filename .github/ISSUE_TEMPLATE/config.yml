@@ -1,0 +1,14 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 💬 GitHub Discussions
+    url: https://github.com/PlytonRexus/parchment-assist/discussions
+    about: Ask questions and discuss ideas with the community
+  - name: 📚 Documentation
+    url: https://github.com/PlytonRexus/parchment-assist/blob/main/README.md
+    about: Check out our comprehensive documentation
+  - name: ❓ FAQ
+    url: https://github.com/PlytonRexus/parchment-assist/blob/main/FAQ.md
+    about: Frequently asked questions about Parchment-Assist
+  - name: 🔒 Security Vulnerability
+    url: https://github.com/PlytonRexus/parchment-assist/security/advisories/new
+    about: Report security vulnerabilities privately

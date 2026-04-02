@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Parchment-Assist</title>
+    <style>
+      body {
+        width: 300px;
+        padding: 20px;
+        margin: 0;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        background: linear-gradient(135deg, #667eea, #764ba2);
+        color: white;
+      }
+
+      .header {
+        text-align: center;
+        margin-bottom: 20px;
+      }
+
+      .header h1 {
+        margin: 0;
+        font-size: 20px;
+        font-weight: 600;
+      }
+
+      .header p {
+        margin: 5px 0 0 0;
+        font-size: 14px;
+        opacity: 0.9;
+      }
+
+      .status {
+        background: rgba(255, 255, 255, 0.1);
+        padding: 15px;
+        border-radius: 8px;
+        margin-bottom: 15px;
+        backdrop-filter: blur(10px);
+      }
+
+      .status-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 8px;
+      }
+
+      .status-item:last-child {
+        margin-bottom: 0;
+      }
+
+      .status-label {
+        font-size: 13px;
+        opacity: 0.9;
+      }
+
+      .status-value {
+        font-size: 13px;
+        font-weight: 500;
+      }
+
+      .indicator {
+        display: inline-block;
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        margin-left: 8px;
+      }
+
+      .indicator.online {
+        background: #2ecc71;
+      }
+      .indicator.offline {
+        background: #e74c3c;
+      }
+
+      .actions {
+        display: flex;
+        gap: 10px;
+      }
+
+      .btn {
+        flex: 1;
+        background: rgba(255, 255, 255, 0.2);
+        border: 1px solid rgba(255, 255, 255, 0.3);
+        color: white;
+        padding: 10px 15px;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 12px;
+        font-weight: 500;
+        transition: all 0.3s ease;
+        text-align: center;
+        text-decoration: none;
+        display: block;
+      }
+
+      .btn:hover {
+        background: rgba(255, 255, 255, 0.3);
+        transform: translateY(-1px);
+      }
+
+      .footer {
+        text-align: center;
+        margin-top: 15px;
+        font-size: 11px;
+        opacity: 0.8;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="header">
+      <h1>🤖 Parchment-Assist</h1>
+      <p>AI Command Suggestions</p>
+    </div>
+
+    <div class="status">
+      <div class="status-item">
+        <span class="status-label">Active Tab:</span>
+        <span class="status-value" id="activeTab">Checking...</span>
+      </div>
+      <div class="status-item">
+        <span class="status-label">Local LLM:</span>
+        <span class="status-value" id="localStatus">
+          Unknown<span class="indicator offline" id="localIndicator"></span>
+        </span>
+      </div>
+      <div class="status-item">
+        <span class="status-label">Cloud LLM:</span>
+        <span class="status-value" id="cloudStatus">
+          Unknown<span class="indicator offline" id="cloudIndicator"></span>
+        </span>
+      </div>
+    </div>
+
+    <div class="status" id="gameStateStatus">
+      <div class="status-item">
+        <span class="status-label">Location:</span>
+        <span class="status-value" id="location">Unknown</span>
+      </div>
+      <div class="status-item">
+        <span class="status-label">Inventory:</span>
+        <span class="status-value" id="inventory">Unknown</span>
+      </div>
+    </div>
+
+    <div class="actions">
+      <button class="btn" id="openOptions">⚙️ Settings</button>
+      <button class="btn" id="testConnection">🧪 Test</button>
+      <button class="btn" id="manualSuggest">💡 Suggest</button>
+    </div>
+
+    <div class="footer">
+      <p>v1.0.0 • Click on IF games to activate</p>
+    </div>
+
+    <script src="popup.js"></script>
+  </body>
+</html>

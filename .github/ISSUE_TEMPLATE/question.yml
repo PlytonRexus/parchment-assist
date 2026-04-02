@@ -1,0 +1,90 @@
+name: ❓ Question
+description: Ask a question about Parchment-Assist
+title: "[Question]: "
+labels: ["question", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Have a question? We're here to help!
+
+        **Note**: For general discussions, consider using [GitHub Discussions](https://github.com/PlytonRexus/parchment-assist/discussions) instead.
+
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: Preflight Checklist
+      description: Please ensure you've completed all of the following.
+      options:
+        - label: I have read the [README](https://github.com/PlytonRexus/parchment-assist/blob/main/README.md)
+          required: true
+        - label: I have checked the [FAQ](https://github.com/PlytonRexus/parchment-assist/blob/main/FAQ.md)
+          required: true
+        - label: I have searched existing issues and discussions
+          required: true
+
+  - type: dropdown
+    id: category
+    attributes:
+      label: Question Category
+      description: What is your question about?
+      options:
+        - Installation and setup
+        - AI backends (Ollama/Gemini)
+        - Extension usage
+        - Game compatibility
+        - Privacy and security
+        - Development and contributing
+        - Chrome Web Store
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: question
+    attributes:
+      label: Your Question
+      description: What would you like to know?
+      placeholder: How do I configure Ollama to use a specific model?
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: Provide any relevant context that might help us answer your question.
+      placeholder: |
+        I'm trying to use the mistral model instead of llama3...
+        I've already tried...
+    validations:
+      required: false
+
+  - type: textarea
+    id: what-tried
+    attributes:
+      label: What Have You Tried?
+      description: What have you already attempted?
+      placeholder: |
+        1. I ran `ollama pull mistral`
+        2. I updated the model name in extension options
+        3. But I'm not sure if...
+    validations:
+      required: false
+
+  - type: input
+    id: extension-version
+    attributes:
+      label: Extension Version
+      description: What version are you using? (Helps us provide accurate answers)
+      placeholder: "1.0.0"
+    validations:
+      required: false
+
+  - type: textarea
+    id: additional-info
+    attributes:
+      label: Additional Information
+      description: Any other information that might be helpful?
+    validations:
+      required: false

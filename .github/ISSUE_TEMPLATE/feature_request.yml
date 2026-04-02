@@ -1,0 +1,146 @@
+name: ✨ Feature Request
+description: Suggest a new feature or enhancement
+title: "[Feature]: "
+labels: ["enhancement", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for suggesting a new feature! Please fill out the form below to help us understand your idea.
+
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: Preflight Checklist
+      description: Please ensure you've completed all of the following.
+      options:
+        - label: I have searched existing issues and discussions to avoid duplicates
+          required: true
+        - label: I have checked the [roadmap](https://github.com/PlytonRexus/parchment-assist#-future-enhancements) to see if this is already planned
+          required: true
+        - label: This feature would benefit other users, not just me
+          required: false
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem Statement
+      description: Is your feature request related to a problem? Please describe.
+      placeholder: I'm frustrated when I have to manually type the same commands repeatedly...
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed Solution
+      description: Describe the solution you'd like to see.
+      placeholder: Add a "favorite commands" feature that lets me save and quickly access frequently used commands...
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives Considered
+      description: Describe any alternative solutions or features you've considered.
+      placeholder: I could use browser bookmarks, but that's not as convenient...
+    validations:
+      required: false
+
+  - type: dropdown
+    id: feature-type
+    attributes:
+      label: Feature Type
+      description: What kind of feature is this?
+      options:
+        - New AI provider support (OpenAI, Claude, etc.)
+        - UI/UX improvement
+        - New command feature
+        - Performance optimization
+        - Accessibility enhancement
+        - Mobile/touch improvements
+        - Game compatibility (Glulx, etc.)
+        - Developer/API feature
+        - Documentation improvement
+        - Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      description: How important is this feature to you?
+      options:
+        - Critical - I can't use the extension effectively without it
+        - High - Would significantly improve my experience
+        - Medium - Nice to have
+        - Low - Minor quality of life improvement
+    validations:
+      required: true
+
+  - type: textarea
+    id: use-cases
+    attributes:
+      label: Use Cases
+      description: Describe specific use cases or scenarios where this feature would be helpful.
+      placeholder: |
+        1. When playing long games, I often need to check inventory multiple times
+        2. When exploring, I frequently use "look" and "examine"
+        3. Having quick access to these would save time
+    validations:
+      required: false
+
+  - type: textarea
+    id: mockups
+    attributes:
+      label: Mockups or Examples
+      description: If applicable, add mockups, screenshots, or examples from other extensions/apps.
+      placeholder: Drag and drop images or paste links here
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Feature Scope
+      description: Which areas would this feature affect?
+      options:
+        - label: Content script (game page interaction)
+        - label: Background service worker (AI processing)
+        - label: Extension options/settings
+        - label: UI/styling
+        - label: Manifest/permissions
+        - label: Documentation
+
+  - type: textarea
+    id: implementation-ideas
+    attributes:
+      label: Implementation Ideas
+      description: |
+        If you have technical ideas about how this could be implemented, share them here.
+        This is optional and doesn't have to be detailed.
+      placeholder: |
+        Maybe add a "star" icon next to suggestions that saves them to localStorage...
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: contribution
+    attributes:
+      label: Contribution
+      description: Are you willing to help implement this feature?
+      options:
+        - label: I'm willing to submit a PR for this feature
+        - label: I can help with testing
+        - label: I can help with documentation
+        - label: I can provide design/mockups
+
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional Context
+      description: Add any other context, links, or information about the feature request.
+    validations:
+      required: false

@@ -1,0 +1,54 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+yarn.lock
+.npmrc
+
+# Testing
+coverage/
+.nyc_output/
+*.lcov
+
+# Build
+dist/
+build/
+*.zip
+*.crx
+*.pem
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+*.code-workspace
+
+# Environment
+.env
+.env.local
+.env.*.local
+.env.test
+
+# Logs
+logs/
+*.log
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+.cache/
+tmp/
+.claude/
+
+# Chrome Extension Development
+*.pem
+web-ext-artifacts/
