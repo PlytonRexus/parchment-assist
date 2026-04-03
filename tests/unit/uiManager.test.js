@@ -355,6 +355,7 @@ describe('UIManager', () => {
         test('should show empty state when no rooms', () => {
             document.body.innerHTML += '<div id="room-list"></div>';
             const { ui } = createUIManager();
+            ui.mapViewMode = 'list';
 
             ui.renderMap();
 
@@ -365,6 +366,7 @@ describe('UIManager', () => {
         test('should render room cards for each room', () => {
             document.body.innerHTML += '<div id="room-list"></div>';
             const { ui, mapManager } = createUIManager();
+            ui.mapViewMode = 'list';
 
             mapManager.addRoom('Dark Cave', { items: ['torch'], exits: [] });
             mapManager.addRoom('Bright Hall', { items: [], exits: [] });
@@ -378,6 +380,7 @@ describe('UIManager', () => {
         test('should render room name as text (XSS safe)', () => {
             document.body.innerHTML += '<div id="room-list"></div>';
             const { ui, mapManager } = createUIManager();
+            ui.mapViewMode = 'list';
 
             const xssName = '<script>window.xss=1</script>';
             mapManager.addRoom(xssName, { items: [], exits: [] });
@@ -387,6 +390,60 @@ describe('UIManager', () => {
             const nameEl = document.querySelector('.room-name');
             expect(nameEl.textContent).toBe(xssName);
             expect(document.querySelector('script')).toBeNull();
+        });
+    });
+
+    describe('renderMap visual mode', () => {
+        test('should render SVG map by default (visual mode)', () => {
+            document.body.innerHTML +=
+                '<div id="map-visual-container"></div><div id="room-list"></div>';
+            const { ui, mapManager } = createUIManager();
+
+            mapManager.addRoom('Dark Cave', { items: [], exits: {} });
+            ui.renderMap();
+
+            const svg = document.querySelector('#map-visual-container svg');
+            expect(svg).not.toBeNull();
+            const nodes = document.querySelectorAll('.map-node');
+            expect(nodes.length).toBe(1);
+        });
+
+        test('should toggle between visual and list views', () => {
+            document.body.innerHTML +=
+                '<div id="map-visual-container"></div><div id="room-list"></div>';
+            const { ui, mapManager } = createUIManager();
+
+            mapManager.addRoom('Room A', { items: [], exits: {} });
+
+            // Default is visual
+            ui.renderMap();
+            expect(document.querySelector('#map-visual-container svg')).not.toBeNull();
+
+            // Switch to list
+            ui.mapViewMode = 'list';
+            ui.renderMap();
+            expect(document.querySelectorAll('.room-card').length).toBe(1);
+        });
+
+        test('setCurrentRoom should update currentRoom property', () => {
+            const { ui } = createUIManager();
+            ui.setCurrentRoom('Throne Room');
+            expect(ui.currentRoom).toBe('Throne Room');
+        });
+
+        test('visual map should highlight current room', () => {
+            document.body.innerHTML +=
+                '<div id="map-visual-container"></div><div id="room-list"></div>';
+            const { ui, mapManager } = createUIManager();
+
+            mapManager.addRoom('Room A', { items: [], exits: {} });
+            mapManager.addRoom('Room B', { items: [], exits: {} });
+            ui.setCurrentRoom('Room A');
+            ui.renderMap();
+
+            const current = document.querySelector('.map-node-current');
+            expect(current).not.toBeNull();
+            expect(current.getAttribute('data-room')).toBe('Room A');
         });
     });
 

@@ -502,6 +502,7 @@ describe('Error Handling', () => {
         <div id="room-list"></div>
       `;
             ({ ui, mapManager } = createUIManager());
+            ui.mapViewMode = 'list';
         });
 
         afterEach(() => {

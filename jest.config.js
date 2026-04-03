@@ -1,6 +1,7 @@
 export default {
     testEnvironment: 'jest-environment-jsdom',
     transform: {},
+    setupFiles: ['./tests/setup.js'],
 
     // Tell Jest where to find tests
     testMatch: ['**/tests/**/*.test.js'],

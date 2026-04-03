@@ -35,15 +35,16 @@ export default [
         },
     },
 
-    // Configuration for test files
+    // Configuration for test files and test setup
     {
-        files: ['tests/**/*.test.js'],
+        files: ['tests/**/*.test.js', 'tests/setup.js'],
         plugins: {
             jest: jestPlugin,
         },
         languageOptions: {
             globals: {
                 ...globals.jest,
+                ...globals.node,
             },
         },
         rules: {

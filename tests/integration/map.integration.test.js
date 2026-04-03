@@ -42,6 +42,89 @@ describe('ParchmentAssist and MapManager Integration', () => {
     });
 });
 
+describe('Map Persistence', () => {
+    let parchmentAssist;
+    let storageData;
+
+    beforeEach(() => {
+        storageData = {};
+        document.body.innerHTML = `
+      <div id="gameport">
+        <div class="BufferLine">Test game text</div>
+      </div>
+      <input type="text" id="input" />
+    `;
+
+        // Mock chrome.storage.local
+        globalThis.chrome = {
+            storage: {
+                local: {
+                    get: async (keys) => {
+                        const result = {};
+                        for (const key of keys) {
+                            if (storageData[key]) {
+                                result[key] = storageData[key];
+                            }
+                        }
+                        return result;
+                    },
+                    set: async (data) => {
+                        Object.assign(storageData, data);
+                    },
+                },
+                sync: {
+                    get: async () => ({}),
+                    set: async () => {},
+                },
+            },
+        };
+
+        parchmentAssist = new ParchmentAssist();
+    });
+
+    afterEach(() => {
+        document.body.innerHTML = '';
+        delete globalThis.chrome;
+    });
+
+    test('_saveMapToStorage should persist map graph', async () => {
+        parchmentAssist.mapManager.addRoom('Hall', { items: ['key'], exits: { north: 'Garden' } });
+        parchmentAssist.gameStateManager.rawGameState.gameTitle = 'TestGame';
+
+        await parchmentAssist._saveMapToStorage();
+
+        expect(storageData['map_TestGame']).toBeDefined();
+        expect(storageData['map_TestGame']['Hall']).toBeDefined();
+        expect(storageData['map_TestGame']['Hall'].items).toEqual(['key']);
+    });
+
+    test('_loadMapFromStorage should restore map graph', async () => {
+        storageData['map_Test'] = {
+            Dungeon: { items: ['sword'], exits: { up: 'Entrance' }, isDeleted: false },
+        };
+        document.title = 'Test - Parchment';
+
+        await parchmentAssist._loadMapFromStorage();
+
+        const room = parchmentAssist.mapManager.getRoom('Dungeon');
+        expect(room).toBeDefined();
+        expect(room.items).toEqual(['sword']);
+    });
+
+    test('_applyStructuredState should set currentRoom on uiManager', async () => {
+        const state = {
+            location: 'Library',
+            npcProfiles: {},
+            mapData: { roomName: 'Library', exits: [] },
+            quests: [],
+        };
+
+        await parchmentAssist._applyStructuredState(state);
+
+        expect(parchmentAssist.uiManager.currentRoom).toBe('Library');
+    });
+});
+
 describe('LLMService and Map Data Integration', () => {
     let llmService;
 

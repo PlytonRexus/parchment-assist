@@ -79,12 +79,12 @@ class GameStateManager {
 
     async extractRawGameState(force = false) {
         return new Promise((resolve) => {
-            const gameport = document.querySelector('#gameport');
-            if (!gameport) {
+            const outputArea = this.findOutputArea() || document.querySelector('#gameport');
+            if (!outputArea) {
                 resolve(null);
                 return;
             }
-            const gameHtml = gameport.innerHTML;
+            const gameHtml = outputArea.innerHTML;
             const cleanedText = HTMLCleaner.clean(gameHtml);
             if (!force && cleanedText === this.lastGameText) {
                 resolve(this.rawGameState);

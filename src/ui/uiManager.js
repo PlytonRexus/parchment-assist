@@ -1,3 +1,5 @@
+import { SVGMapRenderer } from './mapRenderer.js';
+
 class UIManager {
     constructor({
         npcProfiler,
@@ -6,6 +8,7 @@ class UIManager {
         onChoiceSubmit,
         onRefresh,
         onClearJournal,
+        onGetHint,
     }) {
         this.npcProfiler = npcProfiler;
         this.mapManager = mapManager;
@@ -13,12 +16,16 @@ class UIManager {
         this.onChoiceSubmit = onChoiceSubmit || (() => {});
         this.onRefresh = onRefresh || (() => {});
         this.onClearJournal = onClearJournal || (() => {});
+        this.onGetHint = onGetHint || (() => {});
 
         this.commandPalette = null;
         this.bubble = null;
         this.npcModal = null;
         this.choiceMode = false;
         this.classicView = false;
+        this.mapViewMode = 'visual';
+        this.svgMapRenderer = null;
+        this.currentRoom = null;
         this.resizeSaveTimeout = null;
     }
 
@@ -56,6 +63,7 @@ class UIManager {
                 <button id="palette-classic-view-btn" class="classic-view-btn" aria-label="Toggle Classic View" title="Switch to Classic (verb/object) view">
                     <span class="classic-view-text">Classic</span>
                 </button>
+                <button id="palette-hint-btn" aria-label="Get a hint" title="Get a hint">💡</button>
                 <button id="palette-refresh-btn" aria-label="Refresh suggestions">🔄</button>
             </div>
             <div class="palette-content" role="tabpanel" id="palette-content" aria-labelledby="main-tab">
@@ -91,7 +99,11 @@ class UIManager {
                 </div>
             </div>
             <div id="map-tab-content" class="tab-content" role="tabpanel" aria-labelledby="map-tab" style="display: none;">
-                <div id="room-list" role="list" aria-label="Discovered rooms"></div>
+                <div class="map-tab-header">
+                    <button id="map-view-toggle" class="map-view-toggle-btn" aria-label="Toggle map view">List</button>
+                </div>
+                <div id="map-visual-container"></div>
+                <div id="room-list" role="list" aria-label="Discovered rooms" style="display: none;"></div>
             </div>
             <div id="actions-tab-content" class="tab-content" role="tabpanel" aria-labelledby="actions-tab" style="display: none;">
                 <div id="palette-actions" class="palette-list" role="group" aria-label="Suggested actions"></div>
@@ -121,6 +133,10 @@ class UIManager {
                 this.switchTab(tabName);
             });
         });
+
+        this.commandPalette
+            .querySelector('#palette-hint-btn')
+            .addEventListener('click', () => this.onGetHint());
 
         this.commandPalette
             .querySelector('#palette-refresh-btn')
@@ -167,6 +183,10 @@ class UIManager {
             .addEventListener('click', () => {
                 this.toggleClassicView();
             });
+
+        this.commandPalette.querySelector('#map-view-toggle')?.addEventListener('click', () => {
+            this.toggleMapViewMode();
+        });
 
         this.setupPaletteResize();
         this.loadPaletteWidth();
@@ -371,6 +391,7 @@ class UIManager {
                 'paletteWidth',
                 'choiceMode',
                 'classicView',
+                'mapViewMode',
             ]);
             if (result.paletteWidth) {
                 const width = Math.max(200, Math.min(500, result.paletteWidth));
@@ -383,6 +404,10 @@ class UIManager {
             if (result.classicView !== undefined) {
                 this.classicView = result.classicView;
                 this.updateClassicViewUI();
+            }
+            if (result.mapViewMode !== undefined) {
+                this.mapViewMode = result.mapViewMode;
+                this.updateMapViewToggleUI();
             }
         } catch (_error) {
             // Not in extension environment
@@ -443,6 +468,29 @@ class UIManager {
         }
     }
 
+    async toggleMapViewMode() {
+        this.mapViewMode = this.mapViewMode === 'visual' ? 'list' : 'visual';
+        this.updateMapViewToggleUI();
+        this.renderMap();
+        try {
+            await chrome.storage.sync.set({ mapViewMode: this.mapViewMode });
+        } catch (_error) {
+            // Not in extension environment
+        }
+    }
+
+    updateMapViewToggleUI() {
+        const btn = this.commandPalette?.querySelector('#map-view-toggle');
+        if (!btn) {
+            return;
+        }
+        btn.textContent = this.mapViewMode === 'visual' ? 'List' : 'Visual';
+    }
+
+    setCurrentRoom(roomName) {
+        this.currentRoom = roomName;
+    }
+
     togglePalette() {
         if (!this.commandPalette) {
             return;
@@ -462,6 +510,8 @@ class UIManager {
         if (!this.commandPalette || !state) {
             return;
         }
+
+        this.clearRephraseSection();
 
         const content = this.commandPalette.querySelector('.palette-content');
         if (!content) {
@@ -883,7 +933,7 @@ class UIManager {
                 loadingIndicator.className = 'palette-loading-indicator';
                 loadingIndicator.innerHTML = `
                     <div class="loading-spinner"></div>
-                    <span class="loading-text">Loading suggestions...</span>
+                    <span class="loading-text">Analyzing...</span>
                 `;
                 const paletteContent = this.commandPalette.querySelector('.palette-content');
                 if (paletteContent) {
@@ -894,6 +944,16 @@ class UIManager {
             if (loadingIndicator) {
                 loadingIndicator.remove();
             }
+        }
+    }
+
+    updateLoadingText(text) {
+        if (!this.commandPalette) {
+            return;
+        }
+        const loadingText = this.commandPalette.querySelector('.loading-text');
+        if (loadingText) {
+            loadingText.textContent = text;
         }
     }
 
@@ -996,10 +1056,48 @@ class UIManager {
     }
 
     renderMap() {
+        if (this.mapViewMode === 'visual') {
+            this._renderMapVisual();
+        } else {
+            this._renderMapList();
+        }
+    }
+
+    _renderMapVisual() {
+        const visualContainer = document.getElementById('map-visual-container');
+        const roomListContainer = document.getElementById('room-list');
+        if (!visualContainer) {
+            return;
+        }
+
+        if (roomListContainer) {
+            roomListContainer.style.display = 'none';
+        }
+        visualContainer.style.display = 'block';
+
+        if (!this.svgMapRenderer) {
+            this.svgMapRenderer = new SVGMapRenderer(visualContainer, {
+                onRoomClick: (direction) => {
+                    this.onCommandSubmit(direction, 'exit');
+                },
+            });
+        }
+
+        const mapData = this.mapManager.getMap();
+        this.svgMapRenderer.render(mapData, this.currentRoom);
+    }
+
+    _renderMapList() {
+        const visualContainer = document.getElementById('map-visual-container');
         const roomListContainer = document.getElementById('room-list');
         if (!roomListContainer) {
             return;
         }
+
+        if (visualContainer) {
+            visualContainer.style.display = 'none';
+        }
+        roomListContainer.style.display = 'block';
 
         const mapData = this.mapManager.getMap();
         roomListContainer.innerHTML = '';
@@ -1400,7 +1498,88 @@ class UIManager {
         warningBadge.style.animation = 'pulse-warning 2s ease-in-out infinite';
     }
 
+    showRephraseAlternatives(alternatives) {
+        const content = this.commandPalette?.querySelector('.palette-content');
+        if (!content || !alternatives || alternatives.length === 0) {
+            return;
+        }
+
+        this.clearRephraseSection();
+
+        const section = document.createElement('div');
+        section.id = 'rephrase-section';
+        section.className = 'palette-section rephrase-section';
+
+        const heading = document.createElement('h3');
+        heading.textContent = 'Did you mean?';
+        section.appendChild(heading);
+
+        const list = document.createElement('div');
+        list.className = 'rephrase-alternatives';
+
+        alternatives.forEach(({ command, label }) => {
+            const btn = document.createElement('button');
+            btn.className = 'rephrase-btn';
+            btn.textContent = label || command;
+            btn.title = command;
+            btn.addEventListener('click', () => {
+                this.onChoiceSubmit(command);
+                this.clearRephraseSection();
+            });
+            list.appendChild(btn);
+        });
+
+        section.appendChild(list);
+        content.insertBefore(section, content.firstChild);
+    }
+
+    clearRephraseSection() {
+        const section = this.commandPalette?.querySelector('#rephrase-section');
+        if (section) {
+            section.remove();
+        }
+    }
+
+    showHint(hint, level) {
+        this.clearHintSection();
+        const content = this.commandPalette?.querySelector('.palette-content');
+        if (!content || !hint) {
+            return;
+        }
+
+        const levelLabels = ['', 'Nudge', 'Moderate Hint', 'Solution'];
+        const section = document.createElement('div');
+        section.id = 'hint-section';
+        section.className = 'palette-section hint-section';
+
+        const heading = document.createElement('h3');
+        heading.textContent = `Hint \u2014 ${levelLabels[level] || 'Hint'}`;
+        section.appendChild(heading);
+
+        const text = document.createElement('p');
+        text.className = 'hint-text';
+        text.textContent = hint;
+        section.appendChild(text);
+
+        if (level < 3) {
+            const note = document.createElement('p');
+            note.className = 'hint-escalate-note';
+            note.textContent = 'Click \ud83d\udca1 again for a stronger hint.';
+            section.appendChild(note);
+        }
+
+        content.insertBefore(section, content.firstChild);
+    }
+
+    clearHintSection() {
+        this.commandPalette?.querySelector('#hint-section')?.remove();
+    }
+
     destroy() {
+        if (this.svgMapRenderer) {
+            this.svgMapRenderer.destroy();
+            this.svgMapRenderer = null;
+        }
         if (this.commandPalette && this.commandPalette.parentNode) {
             this.commandPalette.parentNode.removeChild(this.commandPalette);
         }

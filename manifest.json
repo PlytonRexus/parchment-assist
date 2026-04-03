@@ -39,9 +39,12 @@
         "src/content/gameStateManager.js",
         "src/content/commandExecutor.js",
         "src/ui/uiManager.js",
+        "src/ui/mapRenderer.js",
         "src/helpers/htmlCleaner.js",
+        "src/helpers/parserFeedback.js",
         "src/lib/npc.js",
-        "src/lib/mapManager.js"
+        "src/lib/mapManager.js",
+        "src/lib/stuckDetector.js"
       ],
       "matches": ["https://iplayif.com/*", "http://iplayif.com/*"]
     }

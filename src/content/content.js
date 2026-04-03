@@ -6,6 +6,8 @@ import { MapManager } from '../lib/mapManager.js';
 import { UIManager } from '../ui/uiManager.js';
 import { GameStateManager } from './gameStateManager.js';
 import { CommandExecutor } from './commandExecutor.js';
+import { ParserFeedbackDetector } from '../helpers/parserFeedback.js';
+import { StuckDetector } from '../lib/stuckDetector.js';
 
 class ParchmentAssist {
     constructor() {
@@ -19,6 +21,11 @@ class ParchmentAssist {
             onError: (msg) => this.uiManager.showError(msg),
         });
 
+        this.stuckDetector = new StuckDetector();
+        this._hintLevel = 0;
+        this._lastRejected = false;
+        this._hintToastShown = false;
+
         this.uiManager = new UIManager({
             npcProfiler: this.npcProfiler,
             mapManager: this.mapManager,
@@ -26,6 +33,7 @@ class ParchmentAssist {
             onChoiceSubmit: (choice) => this.handleChoiceSubmit(choice),
             onRefresh: () => this.handleRefresh(),
             onClearJournal: () => this.gameStateManager.clearJournal(),
+            onGetHint: () => this._requestHint(),
         });
 
         this.isActive = false;
@@ -76,6 +84,7 @@ class ParchmentAssist {
         this.log('Starting assist...');
         this.isActive = true;
         this.uiManager.createCommandPalette();
+        await this._loadMapFromStorage();
         this.setupEventListeners();
         this.startObservingChanges();
         this.log('Parchment-Assist started successfully');
@@ -173,10 +182,19 @@ class ParchmentAssist {
             });
             if (textChanged) {
                 clearTimeout(this.debounceTimer);
-                this.debounceTimer = setTimeout(() => {
-                    this.gameStateManager.extractRawGameState().then(() => {
-                        this.requestSuggestions();
-                    });
+                this.debounceTimer = setTimeout(async () => {
+                    await this.gameStateManager.extractRawGameState();
+                    const gameText = this.gameStateManager.rawGameState.gameText || '';
+                    const lastCommand =
+                        this.gameStateManager.commandHistory[
+                            this.gameStateManager.commandHistory.length - 1
+                        ] || '';
+                    const feedback = ParserFeedbackDetector.detect(gameText.slice(-500));
+                    this._lastRejected = feedback.rejected;
+                    if (feedback.rejected && lastCommand) {
+                        this._requestRephrase(lastCommand, feedback.message);
+                    }
+                    this.requestSuggestions();
                 }, 2000);
             }
         });
@@ -194,49 +212,125 @@ class ParchmentAssist {
         }
 
         this.uiManager.showLoadingState(true);
+        this.uiManager.updateLoadingText('Analyzing...');
 
         try {
-            const response = await chrome.runtime.sendMessage({
-                action: 'getSuggestions',
-                gameState: this.gameStateManager.rawGameState,
-                force: force,
-            });
-
-            if (response && response.success) {
-                this.gameStateManager.structuredGameState = response.structuredState;
-                this.npcProfiler.updateProfiles(
-                    this.gameStateManager.structuredGameState.npcProfiles
-                );
-                if (this.gameStateManager.structuredGameState.mapData) {
-                    const lastCommand =
-                        this.gameStateManager.commandHistory.length > 0
-                            ? this.gameStateManager.commandHistory[
-                                  this.gameStateManager.commandHistory.length - 1
-                              ]
-                            : null;
-                    this.mapManager.updateMap(
-                        this.gameStateManager.structuredGameState.mapData,
-                        this.previousRoom,
-                        lastCommand
-                    );
-                    this.uiManager.renderMap();
-                }
-                this.previousRoom = this.gameStateManager.structuredGameState.location;
-                await this.gameStateManager.mergeQuests();
-                this.uiManager.updateCommandPalette(
-                    this.gameStateManager.structuredGameState,
-                    this.gameStateManager.turnCount
-                );
+            if (typeof chrome !== 'undefined' && chrome.runtime?.connect) {
+                await this._requestViaStreamingPort(force);
             } else {
-                this.uiManager.showError(
-                    'Failed to get structured state: ' + (response?.error || 'Unknown error')
-                );
+                await this._requestViaMessage(force);
             }
         } catch (error) {
             this.log('Error requesting structured state:', error);
             this.uiManager.showError('Connection error');
         } finally {
             this.uiManager.showLoadingState(false);
+        }
+    }
+
+    _requestViaStreamingPort(force) {
+        return new Promise((resolve, reject) => {
+            const port = chrome.runtime.connect({ name: 'streaming' });
+            let settled = false;
+
+            const settle = (fn) => {
+                if (!settled) {
+                    settled = true;
+                    fn();
+                }
+            };
+
+            port.onMessage.addListener((msg) => {
+                if (msg.type === 'progress') {
+                    this.uiManager.updateLoadingText(msg.stage);
+                } else if (msg.type === 'done') {
+                    port.disconnect();
+                    this._applyStructuredState(msg.structuredState)
+                        .then(() => settle(resolve))
+                        .catch((err) => settle(() => reject(err)));
+                } else if (msg.type === 'error') {
+                    port.disconnect();
+                    this.uiManager.showError(
+                        'Failed to get suggestions: ' + (msg.error || 'Unknown error')
+                    );
+                    settle(resolve);
+                }
+            });
+
+            port.onDisconnect.addListener(() => {
+                const err = chrome.runtime?.lastError;
+                if (err) {
+                    settle(() => reject(new Error(err.message)));
+                } else {
+                    settle(resolve);
+                }
+            });
+
+            port.postMessage({
+                action: 'getSuggestionsStreaming',
+                gameState: this.gameStateManager.rawGameState,
+                force,
+            });
+        });
+    }
+
+    async _requestViaMessage(force) {
+        const response = await chrome.runtime.sendMessage({
+            action: 'getSuggestions',
+            gameState: this.gameStateManager.rawGameState,
+            force,
+        });
+
+        if (response && response.success) {
+            await this._applyStructuredState(response.structuredState || {});
+        } else {
+            this.uiManager.showError(
+                'Failed to get structured state: ' + (response?.error || 'Unknown error')
+            );
+        }
+    }
+
+    async _applyStructuredState(structuredState) {
+        this.gameStateManager.structuredGameState = structuredState;
+        this.npcProfiler.updateProfiles(structuredState.npcProfiles);
+        if (structuredState.mapData) {
+            const lastCommand =
+                this.gameStateManager.commandHistory.length > 0
+                    ? this.gameStateManager.commandHistory[
+                          this.gameStateManager.commandHistory.length - 1
+                      ]
+                    : null;
+            this.mapManager.updateMap(structuredState.mapData, this.previousRoom, lastCommand);
+            this.uiManager.renderMap();
+            this._saveMapToStorage();
+        }
+        this.previousRoom = structuredState.location;
+        this.uiManager.setCurrentRoom(structuredState.location);
+        await this.gameStateManager.mergeQuests();
+        this.uiManager.updateCommandPalette(structuredState, this.gameStateManager.turnCount);
+
+        // Stuck detection
+        const lastCmd =
+            this.gameStateManager.commandHistory[this.gameStateManager.commandHistory.length - 1] ||
+            null;
+        this.stuckDetector.update({
+            room: structuredState.location || null,
+            inventory: structuredState.inventory || [],
+            command: lastCmd,
+            wasRejected: this._lastRejected,
+        });
+
+        const stuckLevel = this.stuckDetector.getStuckLevel();
+
+        if (stuckLevel === 0 && this._hintLevel > 0) {
+            this._hintLevel = 0;
+            this.uiManager.clearHintSection();
+            this._hintToastShown = false;
+        }
+
+        if (stuckLevel >= 2 && !this._hintToastShown) {
+            this.uiManager.showStatus('Need a hint? Click the \ud83d\udca1 button.', 'info');
+            this._hintToastShown = true;
         }
     }
 
@@ -249,6 +343,46 @@ class ParchmentAssist {
         await this.gameStateManager.extractRawGameState(true);
         await this.requestSuggestions(true);
         this.uiManager.showStatus('Suggestions refreshed!', 'success');
+    }
+
+    async _requestRephrase(failedCommand, rejectionMessage) {
+        try {
+            const gameText = this.gameStateManager.rawGameState.gameText || '';
+            const response = await chrome.runtime.sendMessage({
+                action: 'rephraseCommand',
+                failedCommand,
+                rejectionMessage,
+                gameText: gameText.slice(-500),
+            });
+            if (response && response.success && response.alternatives.length > 0) {
+                this.uiManager.showRephraseAlternatives(response.alternatives);
+            }
+        } catch (_error) {
+            // Rephrase failed silently — not critical
+        }
+    }
+
+    async _requestHint() {
+        if (this._hintLevel >= 3) {
+            return;
+        }
+        const nextLevel = this._hintLevel + 1;
+        try {
+            const response = await chrome.runtime.sendMessage({
+                action: 'getHint',
+                rawGameState: this.gameStateManager.rawGameState,
+                structuredGameState: this.gameStateManager.structuredGameState,
+                hintLevel: nextLevel,
+            });
+            if (response?.success) {
+                this._hintLevel = nextLevel;
+                this.uiManager.showHint(response.hint, nextLevel);
+            } else {
+                this.uiManager.showError('Could not get hint. Please try again.');
+            }
+        } catch {
+            this.uiManager.showError('Could not get hint. Please try again.');
+        }
     }
 
     async checkAIConfiguration() {
@@ -292,6 +426,36 @@ class ParchmentAssist {
             }
         } catch (error) {
             this.log('Error checking first run:', error);
+        }
+    }
+
+    async _saveMapToStorage() {
+        const gameTitle = this.gameStateManager.rawGameState.gameTitle;
+        if (!gameTitle) {
+            return;
+        }
+        try {
+            const graphData = JSON.parse(JSON.stringify(this.mapManager.graph));
+            await chrome.storage.local.set({ [`map_${gameTitle}`]: graphData });
+        } catch (_error) {
+            // Not in extension environment or storage error
+        }
+    }
+
+    async _loadMapFromStorage() {
+        try {
+            const gameTitle = document.title.replace(/ - Parchment/i, '').trim();
+            if (!gameTitle) {
+                return;
+            }
+            const key = `map_${gameTitle}`;
+            const result = await chrome.storage.local.get([key]);
+            if (result[key]) {
+                this.mapManager.graph = result[key];
+                this.uiManager.renderMap();
+            }
+        } catch (_error) {
+            // Not in extension environment or storage error
         }
     }
 

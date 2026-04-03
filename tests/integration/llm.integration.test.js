@@ -743,4 +743,336 @@ That's the analysis.`;
             expect(result.inventory).toEqual([]);
         });
     });
+
+    describe('Streaming — Ollama', () => {
+        let originalFetch;
+
+        beforeEach(() => {
+            originalFetch = globalThis.fetch;
+        });
+
+        afterEach(() => {
+            globalThis.fetch = originalFetch;
+        });
+
+        function makeStreamingFetch(lines) {
+            globalThis.fetch = async () => ({
+                ok: true,
+                body: {
+                    getReader() {
+                        let index = 0;
+                        return {
+                            async read() {
+                                if (index >= lines.length) {
+                                    return { done: true, value: undefined };
+                                }
+                                return {
+                                    done: false,
+                                    value: Buffer.from(lines[index++]),
+                                };
+                            },
+                        };
+                    },
+                },
+            });
+        }
+
+        test('tryOllamaStreaming accumulates tokens from streaming response', async () => {
+            const chunks = [
+                '{"model":"llama3","response":"{","done":false}\n',
+                '{"model":"llama3","response":"\\"location\\":\\"Dark Room\\"","done":false}\n',
+                '{"model":"llama3","response":"}","done":true}\n',
+            ];
+            makeStreamingFetch(chunks);
+            llmService.settings.ollamaModel = 'llama3';
+
+            const result = await llmService.tryOllamaStreaming('test prompt', null);
+
+            expect(result).toBe('{"location":"Dark Room"}');
+        });
+
+        test('tryOllamaStreaming calls onChunk for each token received', async () => {
+            const chunks = [
+                '{"model":"llama3","response":"hello","done":false}\n',
+                '{"model":"llama3","response":" world","done":true}\n',
+            ];
+            makeStreamingFetch(chunks);
+
+            const calls = [];
+            await llmService.tryOllamaStreaming('prompt', (text) => calls.push(text));
+
+            expect(calls).toEqual(['hello', 'hello world']);
+        });
+
+        test('tryOllamaStreaming terminates on done:true and returns accumulated text', async () => {
+            const chunks = [
+                '{"model":"llama3","response":"token1","done":false}\n',
+                '{"model":"llama3","response":"token2","done":true}\n',
+                // This line should not be processed
+                '{"model":"llama3","response":"token3","done":false}\n',
+            ];
+            makeStreamingFetch(chunks);
+
+            const result = await llmService.tryOllamaStreaming('prompt', null);
+
+            expect(result).toBe('token1token2');
+        });
+
+        test('tryOllamaStreaming skips malformed JSON lines gracefully', async () => {
+            const chunks = [
+                '{"model":"llama3","response":"good","done":false}\n',
+                'not valid json\n',
+                '{"model":"llama3","response":"bye","done":true}\n',
+            ];
+            makeStreamingFetch(chunks);
+
+            const result = await llmService.tryOllamaStreaming('prompt', null);
+
+            expect(result).toBe('goodbye');
+        });
+
+        test('tryOllamaStreaming throws on non-ok HTTP status', async () => {
+            globalThis.fetch = async () => ({ ok: false, status: 503 });
+
+            await expect(llmService.tryOllamaStreaming('prompt', null)).rejects.toThrow(
+                'Ollama API error: 503'
+            );
+        });
+
+        test('partial JSON arriving in chunks produces valid final result via extractStructuredStateStreaming', async () => {
+            const fullJson = JSON.stringify({
+                location: 'Throne Room',
+                inventory: ['crown'],
+                objects: ['throne'],
+                npcs: [],
+                exits: [{ direction: 'south', room: 'Hall' }],
+                verbs: ['EXAMINE'],
+                room_description: 'A grand room.',
+                quests: [],
+                suggestedActions: [],
+                npcProfiles: {},
+                mapData: { roomName: 'Throne Room', exits: [] },
+                interactables: [],
+            });
+
+            // Deliver in 3 chunks
+            const third = Math.floor(fullJson.length / 3);
+            const c1 = fullJson.slice(0, third);
+            const c2 = fullJson.slice(third, third * 2);
+            const c3 = fullJson.slice(third * 2);
+
+            const chunks = [
+                `{"model":"llama3","response":${JSON.stringify(c1)},"done":false}\n`,
+                `{"model":"llama3","response":${JSON.stringify(c2)},"done":false}\n`,
+                `{"model":"llama3","response":${JSON.stringify(c3)},"done":true}\n`,
+            ];
+            makeStreamingFetch(chunks);
+            llmService.settings.activeProviders = ['ollama'];
+
+            const gameState = { gameTitle: 'Test', gameText: 'text', lastCommands: [] };
+            const result = await llmService.extractStructuredStateStreaming(gameState, null);
+
+            expect(result.location).toBe('Throne Room');
+            expect(result.inventory).toEqual(['crown']);
+            expect(result.objects).toEqual(['throne']);
+        });
+    });
+
+    describe('Streaming — Gemini', () => {
+        let originalFetch;
+
+        beforeEach(() => {
+            originalFetch = globalThis.fetch;
+        });
+
+        afterEach(() => {
+            globalThis.fetch = originalFetch;
+        });
+
+        function makeGeminiStreamingFetch(textChunks) {
+            const lines = textChunks.map(
+                (t) =>
+                    `data: ${JSON.stringify({ candidates: [{ content: { parts: [{ text: t }] } }] })}\n\n`
+            );
+            globalThis.fetch = async () => ({
+                ok: true,
+                body: {
+                    getReader() {
+                        let index = 0;
+                        return {
+                            async read() {
+                                if (index >= lines.length) {
+                                    return { done: true, value: undefined };
+                                }
+                                return { done: false, value: Buffer.from(lines[index++]) };
+                            },
+                        };
+                    },
+                },
+            });
+        }
+
+        test('tryGeminiStreaming accumulates tokens from SSE response', async () => {
+            makeGeminiStreamingFetch(['{"location"', ':"Garden"}']);
+            llmService.settings.geminiKey = 'key';
+
+            const result = await llmService.tryGeminiStreaming('prompt', null);
+
+            expect(result).toBe('{"location":"Garden"}');
+        });
+
+        test('tryGeminiStreaming calls onChunk for each SSE event', async () => {
+            makeGeminiStreamingFetch(['first', ' second']);
+            llmService.settings.geminiKey = 'key';
+
+            const calls = [];
+            await llmService.tryGeminiStreaming('prompt', (t) => calls.push(t));
+
+            expect(calls).toEqual(['first', 'first second']);
+        });
+
+        test('tryGeminiStreaming skips SSE events without data: prefix', async () => {
+            const raw =
+                'event: ping\n\ndata: {"candidates":[{"content":{"parts":[{"text":"hi"}]}}]}\n\n';
+            globalThis.fetch = async () => ({
+                ok: true,
+                body: {
+                    getReader() {
+                        let sent = false;
+                        return {
+                            async read() {
+                                if (sent) {
+                                    return { done: true, value: undefined };
+                                }
+                                sent = true;
+                                return { done: false, value: Buffer.from(raw) };
+                            },
+                        };
+                    },
+                },
+            });
+            llmService.settings.geminiKey = 'key';
+
+            const result = await llmService.tryGeminiStreaming('prompt', null);
+
+            expect(result).toBe('hi');
+        });
+
+        test('tryGeminiStreaming throws on non-ok HTTP status', async () => {
+            globalThis.fetch = async () => ({ ok: false, status: 429 });
+            llmService.settings.geminiKey = 'key';
+
+            await expect(llmService.tryGeminiStreaming('prompt', null)).rejects.toThrow(
+                'Gemini streaming API error: 429'
+            );
+        });
+    });
+
+    describe('Streaming — detectStreamingStage', () => {
+        test('returns "Analyzing..." for empty text', () => {
+            expect(llmService.detectStreamingStage('')).toBe('Analyzing...');
+            expect(llmService.detectStreamingStage(null)).toBe('Analyzing...');
+        });
+
+        test('returns location stage when "location" keyword appears', () => {
+            expect(llmService.detectStreamingStage('{"location"')).toBe('Identifying location...');
+        });
+
+        test('returns objects stage when "objects" keyword appears', () => {
+            expect(llmService.detectStreamingStage('{"location":"r","objects"')).toBe(
+                'Listing objects...'
+            );
+        });
+
+        test('returns later stages when later keywords appear', () => {
+            expect(
+                llmService.detectStreamingStage('{"location":"r","objects":[],"interactables"')
+            ).toBe('Identifying interactables...');
+
+            expect(llmService.detectStreamingStage('{"location":"r","suggestedActions"')).toBe(
+                'Generating suggested actions...'
+            );
+        });
+
+        test('earlier keyword does not shadow a later stage keyword', () => {
+            // suggestedActions appears later in output but earlier in the if-chain
+            const text = '{"location":"r","objects":[],"npcProfiles":{},"suggestedActions"';
+            expect(llmService.detectStreamingStage(text)).toBe('Generating suggested actions...');
+        });
+    });
+
+    describe('Streaming — extractStructuredStateStreaming', () => {
+        test('calls onProgress with stage info as tokens arrive', async () => {
+            const fullJson = JSON.stringify({
+                location: 'Cave',
+                inventory: [],
+                objects: [],
+                npcs: [],
+                exits: [],
+                verbs: [],
+                room_description: '',
+                quests: [],
+                suggestedActions: [],
+                npcProfiles: {},
+                mapData: { roomName: 'Cave', exits: [] },
+                interactables: [],
+            });
+
+            llmService.callProviderForStateStreaming = async (prompt, onChunk) => {
+                onChunk('{"location"');
+                onChunk(fullJson);
+                return fullJson;
+            };
+
+            const stages = [];
+            const gameState = { gameTitle: 'T', gameText: 'x', lastCommands: [] };
+            await llmService.extractStructuredStateStreaming(gameState, ({ stage }) =>
+                stages.push(stage)
+            );
+
+            expect(stages.length).toBeGreaterThan(0);
+            expect(stages[0]).toBe('Identifying location...');
+        });
+
+        test('returns empty state when callProviderForStateStreaming returns null (streaming failure fallback)', async () => {
+            llmService.callProviderForStateStreaming = async () => null;
+
+            const gameState = { gameTitle: 'T', gameText: 'x', lastCommands: [] };
+            const result = await llmService.extractStructuredStateStreaming(gameState, null);
+
+            expect(result.location).toBe('');
+            expect(Array.isArray(result.interactables)).toBe(true);
+        });
+
+        test('validates and normalizes streamed state the same way as non-streaming path', async () => {
+            const raw = JSON.stringify({
+                location: 'Dungeon',
+                inventory: [],
+                objects: [],
+                npcs: [],
+                exits: [],
+                verbs: [],
+                room_description: '',
+                quests: [],
+                suggestedActions: [],
+                npcProfiles: {},
+                mapData: { roomName: 'Dungeon', exits: [] },
+                interactables: [
+                    {
+                        name: 'torch',
+                        type: 'object',
+                        actions: [{ command: 'take torch', label: 'Take', confidence: 1.5 }],
+                    },
+                ],
+            });
+
+            llmService.callProviderForStateStreaming = async () => raw;
+
+            const gameState = { gameTitle: 'T', gameText: 'x', lastCommands: [] };
+            const result = await llmService.extractStructuredStateStreaming(gameState, null);
+
+            // confidence clamped to 1
+            expect(result.interactables[0].actions[0].confidence).toBe(1);
+        });
+    });
 });

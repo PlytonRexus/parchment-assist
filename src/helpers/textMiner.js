@@ -8,6 +8,7 @@ export class AdvancedGameStateExtractor {
             npcs: [],
             exits: [],
             roomDescription: '',
+            interactables: [],
         };
 
         if (!gameText) {
@@ -36,6 +37,9 @@ export class AdvancedGameStateExtractor {
 
         // Extract room description
         state.roomDescription = this.extractRoomDescription(lines);
+
+        // Generate interactables fallback when AI is unavailable
+        state.interactables = this.generateInteractables(state);
 
         return state;
     }
@@ -307,6 +311,47 @@ export class AdvancedGameStateExtractor {
         }
 
         return '';
+    }
+
+    static generateInteractables(parsedState) {
+        const interactables = [];
+
+        for (const obj of parsedState.objects) {
+            interactables.push({
+                name: obj,
+                type: 'object',
+                actions: [
+                    { command: `examine ${obj}`, label: 'Examine', confidence: 0.9 },
+                    { command: `take ${obj}`, label: 'Take', confidence: 0.7 },
+                    { command: `drop ${obj}`, label: 'Drop', confidence: 0.5 },
+                ],
+            });
+        }
+
+        for (const npc of parsedState.npcs) {
+            interactables.push({
+                name: npc,
+                type: 'npc',
+                actions: [
+                    { command: `examine ${npc}`, label: 'Examine', confidence: 0.8 },
+                    { command: `talk to ${npc}`, label: 'Talk', confidence: 0.75 },
+                    { command: `ask ${npc} about`, label: 'Ask', confidence: 0.6 },
+                ],
+            });
+        }
+
+        for (const exit of parsedState.exits) {
+            const dir = typeof exit === 'string' ? exit : exit.direction;
+            if (dir) {
+                interactables.push({
+                    name: dir,
+                    type: 'exit',
+                    actions: [{ command: `go ${dir}`, label: `Go ${dir}`, confidence: 0.95 }],
+                });
+            }
+        }
+
+        return interactables;
     }
 
     static splitObjectList(text) {
