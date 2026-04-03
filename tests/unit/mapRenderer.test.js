@@ -379,4 +379,143 @@ describe('SVGMapRenderer', () => {
 
         renderer.destroy();
     });
+
+    describe('Cardinal direction labels', () => {
+        test('edge label shows abbreviated direction (N for north)', () => {
+            const renderer = new SVGMapRenderer(container);
+            const mapData = {
+                rooms: {
+                    Hall: { items: [], exits: { north: 'Garden' } },
+                    Garden: { items: [], exits: { south: 'Hall' } },
+                },
+                connections: [
+                    { from: 'Hall', to: 'Garden', label: 'north' },
+                    { from: 'Garden', to: 'Hall', label: 'south' },
+                ],
+            };
+            renderer.render(mapData, 'Hall');
+            const labels = container.querySelectorAll('.map-edge-label');
+            const texts = Array.from(labels).map((l) => l.textContent);
+            // Bidirectional edge should show 'N / S' or similar abbreviations
+            expect(texts.some((t) => t.includes('N'))).toBe(true);
+            renderer.destroy();
+        });
+
+        test('up/down edge gets stroke-dasharray attribute', () => {
+            const renderer = new SVGMapRenderer(container);
+            const mapData = {
+                rooms: {
+                    Cellar: { items: [], exits: { up: 'Kitchen' } },
+                    Kitchen: { items: [], exits: { down: 'Cellar' } },
+                },
+                connections: [
+                    { from: 'Cellar', to: 'Kitchen', label: 'up' },
+                    { from: 'Kitchen', to: 'Cellar', label: 'down' },
+                ],
+            };
+            renderer.render(mapData, 'Cellar');
+            const edges = container.querySelectorAll('.map-edge');
+            const dashedEdge = Array.from(edges).find((e) => e.getAttribute('stroke-dasharray'));
+            expect(dashedEdge).not.toBeNull();
+            renderer.destroy();
+        });
+
+        test('up edge label shows arrow symbol', () => {
+            const renderer = new SVGMapRenderer(container);
+            const mapData = {
+                rooms: {
+                    Cellar: { items: [], exits: { up: 'Kitchen' } },
+                    Kitchen: { items: [], exits: {} },
+                },
+                connections: [{ from: 'Cellar', to: 'Kitchen', label: 'up' }],
+            };
+            renderer.render(mapData, 'Cellar');
+            const labels = container.querySelectorAll('.map-edge-label');
+            const texts = Array.from(labels).map((l) => l.textContent);
+            expect(texts.some((t) => t.includes('\u2191'))).toBe(true);
+            renderer.destroy();
+        });
+
+        test('cardinal edge does not get stroke-dasharray attribute', () => {
+            const renderer = new SVGMapRenderer(container);
+            const mapData = {
+                rooms: {
+                    Hall: { items: [], exits: { north: 'Garden' } },
+                    Garden: { items: [], exits: {} },
+                },
+                connections: [{ from: 'Hall', to: 'Garden', label: 'north' }],
+            };
+            renderer.render(mapData, 'Hall');
+            const edges = container.querySelectorAll('.map-edge');
+            const dashedEdge = Array.from(edges).find((e) => e.getAttribute('stroke-dasharray'));
+            expect(dashedEdge).toBeUndefined();
+            renderer.destroy();
+        });
+    });
+});
+
+// ── ForceLayout directional bias ─────────────────────────────────────────────
+
+describe('ForceLayout directional bias', () => {
+    test('north-connected room ends up with lower y than source', () => {
+        const nodes = [
+            { id: 'Hall', x: 0, y: 0 },
+            { id: 'Garden', x: 0, y: 0 },
+        ];
+        const edges = [{ source: 'Hall', target: 'Garden' }];
+        const directionalEdges = [{ source: 'Hall', target: 'Garden', direction: 'north' }];
+        const layout = new ForceLayout(nodes, edges, {
+            directionalEdges,
+            directionalStrength: 0.5,
+            iterations: 200,
+        });
+        const positions = layout.run();
+        // Garden (north of Hall) should have a lower y value (higher on screen)
+        expect(positions.Garden.y).toBeLessThan(positions.Hall.y);
+    });
+
+    test('south-connected room ends up with higher y than source', () => {
+        const nodes = [
+            { id: 'Hall', x: 0, y: 0 },
+            { id: 'Cellar', x: 0, y: 0 },
+        ];
+        const edges = [{ source: 'Hall', target: 'Cellar' }];
+        const directionalEdges = [{ source: 'Hall', target: 'Cellar', direction: 'south' }];
+        const layout = new ForceLayout(nodes, edges, {
+            directionalEdges,
+            directionalStrength: 0.5,
+            iterations: 200,
+        });
+        const positions = layout.run();
+        expect(positions.Cellar.y).toBeGreaterThan(positions.Hall.y);
+    });
+
+    test('up/down direction produces no positional bias (same as no directional edge)', () => {
+        const nodesA = [
+            { id: 'A', x: 0, y: 0 },
+            { id: 'B', x: 10, y: 0 },
+        ];
+        const nodesB = [
+            { id: 'A', x: 0, y: 0 },
+            { id: 'B', x: 10, y: 0 },
+        ];
+        const edges = [{ source: 'A', target: 'B' }];
+
+        const layoutWithUp = new ForceLayout(nodesA, edges, {
+            directionalEdges: [{ source: 'A', target: 'B', direction: 'up' }],
+            directionalStrength: 0.5,
+            iterations: 50,
+        });
+        const layoutWithNone = new ForceLayout(nodesB, edges, {
+            directionalEdges: [],
+            directionalStrength: 0.5,
+            iterations: 50,
+        });
+
+        const posA = layoutWithUp.run();
+        const posB = layoutWithNone.run();
+        // Both should produce same result since 'up' has no vector
+        expect(posA.A.x).toBeCloseTo(posB.A.x, 0);
+        expect(posA.A.y).toBeCloseTo(posB.A.y, 0);
+    });
 });

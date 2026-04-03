@@ -1,5 +1,37 @@
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
+// Cardinal direction unit vectors (SVG coords: y increases downward)
+const DIRECTION_VECTORS = {
+    north: [0, -1],
+    south: [0, 1],
+    east: [1, 0],
+    west: [-1, 0],
+    northeast: [0.707, -0.707],
+    northwest: [-0.707, -0.707],
+    southeast: [0.707, 0.707],
+    southwest: [-0.707, 0.707],
+    // up/down/in/out: no positional bias (rendered as dashed lines instead)
+};
+
+// Abbreviated direction labels for edge display
+function abbreviateDirection(label) {
+    const abbr = {
+        north: 'N',
+        south: 'S',
+        east: 'E',
+        west: 'W',
+        northeast: 'NE',
+        northwest: 'NW',
+        southeast: 'SE',
+        southwest: 'SW',
+        up: '\u2191',
+        down: '\u2193',
+        in: 'in',
+        out: 'out',
+    };
+    return abbr[label?.toLowerCase()] ?? label ?? '';
+}
+
 // ── ForceLayout ──────────────────────────────────────────────────────────────
 
 export class ForceLayout {
@@ -12,6 +44,8 @@ export class ForceLayout {
         this.damping = options.damping ?? 0.9;
         this.iterations = options.iterations ?? 150;
         this.gravity = options.gravity ?? 0.01;
+        this.directionalStrength = options.directionalStrength ?? 0.03;
+        this.directionalEdges = options.directionalEdges ?? []; // [{ source, target, direction }]
     }
 
     run() {
@@ -76,6 +110,29 @@ export class ForceLayout {
                 forces[si].fy += fy;
                 forces[ti].fx -= fx;
                 forces[ti].fy -= fy;
+            }
+
+            // Directional bias (north-up alignment)
+            for (const de of this.directionalEdges) {
+                const vec = DIRECTION_VECTORS[de.direction?.toLowerCase()];
+                if (!vec) {
+                    continue; // up/down/in/out: no positional bias
+                }
+                const si = idIndex[de.source];
+                const ti = idIndex[de.target];
+                if (si === undefined || ti === undefined) {
+                    continue;
+                }
+                const prefDx = vec[0] * this.springLength;
+                const prefDy = vec[1] * this.springLength;
+                const actualDx = state[ti].x - state[si].x;
+                const actualDy = state[ti].y - state[si].y;
+                const biasFx = (prefDx - actualDx) * this.directionalStrength;
+                const biasFy = (prefDy - actualDy) * this.directionalStrength;
+                forces[si].fx -= biasFx;
+                forces[si].fy -= biasFy;
+                forces[ti].fx += biasFx;
+                forces[ti].fy += biasFy;
             }
 
             // Gravity toward centroid
@@ -215,9 +272,17 @@ export class SVGMapRenderer {
         // Build layout
         const nodes = ForceLayout.gridPositions(roomNames);
         const edges = this._deduplicateEdges(connections);
+        const directionalEdges = edges.map((e) => ({
+            source: e.from,
+            target: e.to,
+            direction: e.label,
+        }));
         const layout = new ForceLayout(
             nodes,
-            edges.map((e) => ({ source: e.from, target: e.to }))
+            edges.map((e) => ({ source: e.from, target: e.to })),
+            {
+                directionalEdges,
+            }
         );
         const positions = layout.run();
 
@@ -323,8 +388,12 @@ export class SVGMapRenderer {
         const x2 = toPos.x - nx * toOffset;
         const y2 = toPos.y - ny * toOffset;
 
+        const isVertical =
+            ['up', 'down', 'in', 'out'].includes(edge.label?.toLowerCase()) ||
+            ['up', 'down', 'in', 'out'].includes(edge.reverseLabel?.toLowerCase());
+
         const line = document.createElementNS(SVG_NS, 'line');
-        line.setAttribute('class', 'map-edge');
+        line.setAttribute('class', isVertical ? 'map-edge map-edge-vertical' : 'map-edge');
         line.setAttribute('x1', String(x1));
         line.setAttribute('y1', String(y1));
         line.setAttribute('x2', String(x2));
@@ -333,9 +402,12 @@ export class SVGMapRenderer {
         if (edge.bidirectional) {
             line.setAttribute('marker-start', 'url(#arrowhead-start)');
         }
+        if (isVertical) {
+            line.setAttribute('stroke-dasharray', '5,4');
+        }
         this.viewport.appendChild(line);
 
-        // Direction label at midpoint
+        // Direction label at midpoint (abbreviated)
         if (edge.label) {
             const midX = (x1 + x2) / 2;
             const midY = (y1 + y2) / 2;
@@ -344,7 +416,9 @@ export class SVGMapRenderer {
             labelText.setAttribute('x', String(midX));
             labelText.setAttribute('y', String(midY - 6));
             labelText.setAttribute('text-anchor', 'middle');
-            labelText.textContent = edge.label;
+            const abbrev = abbreviateDirection(edge.label);
+            const reverseAbbrev = edge.reverseLabel ? abbreviateDirection(edge.reverseLabel) : null;
+            labelText.textContent = reverseAbbrev ? `${abbrev} / ${reverseAbbrev}` : abbrev;
             this.viewport.appendChild(labelText);
         }
     }

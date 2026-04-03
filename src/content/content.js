@@ -8,6 +8,7 @@ import { GameStateManager } from './gameStateManager.js';
 import { CommandExecutor } from './commandExecutor.js';
 import { ParserFeedbackDetector } from '../helpers/parserFeedback.js';
 import { StuckDetector } from '../lib/stuckDetector.js';
+import { TextAnnotator } from './textAnnotator.js';
 
 class ParchmentAssist {
     constructor() {
@@ -22,6 +23,9 @@ class ParchmentAssist {
         });
 
         this.stuckDetector = new StuckDetector();
+        this.textAnnotator = new TextAnnotator({
+            onChoiceSubmit: (command) => this.handleChoiceSubmit(command),
+        });
         this._hintLevel = 0;
         this._lastRejected = false;
         this._hintToastShown = false;
@@ -87,6 +91,10 @@ class ParchmentAssist {
         await this._loadMapFromStorage();
         this.setupEventListeners();
         this.startObservingChanges();
+        const outputArea = this.gameStateManager.findOutputArea();
+        if (outputArea) {
+            this.textAnnotator.setupHoverListeners(outputArea);
+        }
         this.log('Parchment-Assist started successfully');
         await this.checkFirstRun();
     }
@@ -192,6 +200,7 @@ class ParchmentAssist {
                     const feedback = ParserFeedbackDetector.detect(gameText.slice(-500));
                     this._lastRejected = feedback.rejected;
                     if (feedback.rejected && lastCommand) {
+                        this.gameStateManager.recordRejection(lastCommand);
                         this._requestRephrase(lastCommand, feedback.message);
                     }
                     this.requestSuggestions();
@@ -304,10 +313,22 @@ class ParchmentAssist {
             this.uiManager.renderMap();
             this._saveMapToStorage();
         }
+
+        // Clear rejection blacklist when player moves to a new room
+        if (structuredState.location && structuredState.location !== this.previousRoom) {
+            this.gameStateManager.clearRejections();
+        }
+
         this.previousRoom = structuredState.location;
         this.uiManager.setCurrentRoom(structuredState.location);
         await this.gameStateManager.mergeQuests();
-        this.uiManager.updateCommandPalette(structuredState, this.gameStateManager.turnCount);
+
+        // Filter interactables by rejection blacklist before rendering
+        const filteredInteractables = this.gameStateManager.filterByRejections(
+            structuredState.interactables || []
+        );
+        const stateForPalette = { ...structuredState, interactables: filteredInteractables };
+        this.uiManager.updateCommandPalette(stateForPalette, this.gameStateManager.turnCount);
 
         // Stuck detection
         const lastCmd =
@@ -331,6 +352,26 @@ class ParchmentAssist {
         if (stuckLevel >= 2 && !this._hintToastShown) {
             this.uiManager.showStatus('Need a hint? Click the \ud83d\udca1 button.', 'info');
             this._hintToastShown = true;
+        }
+
+        this._annotateGameText(stateForPalette.interactables);
+    }
+
+    _annotateGameText(interactables) {
+        if (this.mutationObserver) {
+            this.mutationObserver.disconnect();
+        }
+        try {
+            this.textAnnotator.annotate(interactables);
+        } finally {
+            const outputArea = this.gameStateManager.findOutputArea();
+            if (outputArea && this.mutationObserver) {
+                this.mutationObserver.observe(outputArea, {
+                    childList: true,
+                    subtree: true,
+                    characterData: true,
+                });
+            }
         }
     }
 
@@ -465,6 +506,7 @@ class ParchmentAssist {
             this.mutationObserver.disconnect();
         }
         this.uiManager.destroy();
+        this.textAnnotator.destroy();
         clearTimeout(this.debounceTimer);
         this.log('Parchment-Assist stopped');
     }

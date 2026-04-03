@@ -12,6 +12,7 @@ class GameStateManager {
         this.turnCount = 0;
         this.lastGameText = '';
         this._mergingQuests = false;
+        this.rejectedCommands = new Map(); // command (lowercase) → rejection count
     }
 
     isParchmentPage() {
@@ -75,6 +76,35 @@ class GameStateManager {
         if (this.commandHistory.length > 10) {
             this.commandHistory = this.commandHistory.slice(-10);
         }
+    }
+
+    recordRejection(command) {
+        if (!command) {
+            return;
+        }
+        const normalized = command.trim().toLowerCase();
+        this.rejectedCommands.set(normalized, (this.rejectedCommands.get(normalized) || 0) + 1);
+    }
+
+    clearRejections() {
+        this.rejectedCommands.clear();
+    }
+
+    filterByRejections(interactables, threshold = 2) {
+        if (!interactables) {
+            return [];
+        }
+        const result = [];
+        for (const item of interactables) {
+            const filteredActions = (item.actions || []).filter((action) => {
+                const normalized = (action.command || '').trim().toLowerCase();
+                return (this.rejectedCommands.get(normalized) || 0) < threshold;
+            });
+            if (filteredActions.length > 0) {
+                result.push({ ...item, actions: filteredActions });
+            }
+        }
+        return result;
     }
 
     async extractRawGameState(force = false) {

@@ -1823,3 +1823,46 @@
 .onboarding-body::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.4);
 }
+
+/* Phase 8 — Inline Interactive Text */
+.pa-interactive {
+  border-bottom: 1px dotted rgba(52, 152, 219, 0.7);
+  cursor: pointer;
+  border-radius: 2px;
+  transition: background 0.1s ease;
+}
+.pa-interactive:hover {
+  background: rgba(52, 152, 219, 0.15);
+  border-bottom-color: rgba(52, 152, 219, 1);
+}
+.pa-action-popup {
+  position: absolute;
+  z-index: 10000;
+  background: #2c3e50;
+  border: 1px solid rgba(52, 152, 219, 0.4);
+  border-radius: 6px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 120px;
+  max-width: 240px;
+}
+.pa-action-popup-btn {
+  display: block;
+  width: 100%;
+  padding: 6px 10px;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  color: #ecf0f1;
+  font-size: 12px;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.1s ease;
+  white-space: nowrap;
+}
+.pa-action-popup-btn:hover {
+  background: rgba(52, 152, 219, 0.25);
+}

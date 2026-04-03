@@ -38,6 +38,7 @@
         "src/content/content.js",
         "src/content/gameStateManager.js",
         "src/content/commandExecutor.js",
+        "src/content/textAnnotator.js",
         "src/ui/uiManager.js",
         "src/ui/mapRenderer.js",
         "src/helpers/htmlCleaner.js",

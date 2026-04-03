@@ -159,4 +159,100 @@ describe('GameStateManager', () => {
             expect(result.lastCommands).toContain('examine door');
         });
     });
+
+    describe('Rejection Tracking', () => {
+        test('recordRejection increments count for a command', () => {
+            gsm.recordRejection('go out');
+            expect(gsm.rejectedCommands.get('go out')).toBe(1);
+        });
+
+        test('recordRejection increments count on repeated calls', () => {
+            gsm.recordRejection('go out');
+            gsm.recordRejection('go out');
+            expect(gsm.rejectedCommands.get('go out')).toBe(2);
+        });
+
+        test('recordRejection normalises to lowercase', () => {
+            gsm.recordRejection('Go Out');
+            expect(gsm.rejectedCommands.get('go out')).toBe(1);
+        });
+
+        test('recordRejection does nothing for falsy input', () => {
+            gsm.recordRejection(null);
+            gsm.recordRejection('');
+            expect(gsm.rejectedCommands.size).toBe(0);
+        });
+
+        test('clearRejections resets all counts', () => {
+            gsm.recordRejection('go out');
+            gsm.recordRejection('take key');
+            gsm.clearRejections();
+            expect(gsm.rejectedCommands.size).toBe(0);
+        });
+
+        test('filterByRejections removes action when count reaches threshold', () => {
+            gsm.recordRejection('go out');
+            gsm.recordRejection('go out');
+            const interactables = [
+                {
+                    name: 'out',
+                    type: 'exit',
+                    actions: [{ label: 'Go out', command: 'go out', confidence: 0.8 }],
+                },
+            ];
+            expect(gsm.filterByRejections(interactables)).toHaveLength(0);
+        });
+
+        test('filterByRejections keeps action when count is below threshold', () => {
+            gsm.recordRejection('go out');
+            const interactables = [
+                {
+                    name: 'out',
+                    type: 'exit',
+                    actions: [{ label: 'Go out', command: 'go out', confidence: 0.8 }],
+                },
+            ];
+            expect(gsm.filterByRejections(interactables)).toHaveLength(1);
+        });
+
+        test('filterByRejections removes only rejected actions, keeps others', () => {
+            gsm.recordRejection('go out');
+            gsm.recordRejection('go out');
+            const interactables = [
+                {
+                    name: 'door',
+                    type: 'object',
+                    actions: [
+                        { label: 'Open', command: 'open door', confidence: 0.9 },
+                        { label: 'Go out', command: 'go out', confidence: 0.5 },
+                    ],
+                },
+            ];
+            const result = gsm.filterByRejections(interactables);
+            expect(result).toHaveLength(1);
+            expect(result[0].actions).toHaveLength(1);
+            expect(result[0].actions[0].command).toBe('open door');
+        });
+
+        test('filterByRejections removes interactable when all actions rejected', () => {
+            gsm.recordRejection('go north');
+            gsm.recordRejection('go north');
+            const interactables = [
+                {
+                    name: 'north',
+                    type: 'exit',
+                    actions: [{ label: 'Go north', command: 'go north', confidence: 0.9 }],
+                },
+            ];
+            expect(gsm.filterByRejections(interactables)).toHaveLength(0);
+        });
+
+        test('filterByRejections returns empty array for null input', () => {
+            expect(gsm.filterByRejections(null)).toEqual([]);
+        });
+
+        test('filterByRejections returns empty array for undefined input', () => {
+            expect(gsm.filterByRejections(undefined)).toEqual([]);
+        });
+    });
 });
