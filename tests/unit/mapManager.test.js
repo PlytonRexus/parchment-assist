@@ -53,4 +53,97 @@ describe('MapManager', () => {
         const roomA = mapManager.getRoom(previousRoom);
         expect(roomA.exits[direction]).toBe(currentRoom);
     });
+
+    describe('bidirectional connections', () => {
+        test('north->south: adding A->B north auto-creates B->A south', () => {
+            mapManager.addRoom('Room A', {});
+            mapManager.addRoom('Room B', {});
+            mapManager.addConnection('Room A', 'Room B', 'north');
+            expect(mapManager.getRoom('Room A').exits.north).toBe('Room B');
+            expect(mapManager.getRoom('Room B').exits.south).toBe('Room A');
+        });
+
+        test('east->west: adding A->B east auto-creates B->A west', () => {
+            mapManager.addRoom('Room A', {});
+            mapManager.addRoom('Room B', {});
+            mapManager.addConnection('Room A', 'Room B', 'east');
+            expect(mapManager.getRoom('Room B').exits.west).toBe('Room A');
+        });
+
+        test('up->down: adding A->B up auto-creates B->A down', () => {
+            mapManager.addRoom('Room A', {});
+            mapManager.addRoom('Room B', {});
+            mapManager.addConnection('Room A', 'Room B', 'up');
+            expect(mapManager.getRoom('Room B').exits.down).toBe('Room A');
+        });
+
+        test('in->out: adding A->B in auto-creates B->A out', () => {
+            mapManager.addRoom('Room A', {});
+            mapManager.addRoom('Room B', {});
+            mapManager.addConnection('Room A', 'Room B', 'in');
+            expect(mapManager.getRoom('Room B').exits.out).toBe('Room A');
+        });
+
+        test('northeast->southwest: diagonal auto-reverse', () => {
+            mapManager.addRoom('Room A', {});
+            mapManager.addRoom('Room B', {});
+            mapManager.addConnection('Room A', 'Room B', 'northeast');
+            expect(mapManager.getRoom('Room B').exits.southwest).toBe('Room A');
+        });
+
+        test('should not overwrite existing reverse exit', () => {
+            mapManager.addRoom('Room A', {});
+            mapManager.addRoom('Room B', {});
+            mapManager.addRoom('Room C', {});
+            // Manually set B->south = C
+            mapManager.getRoom('Room B').exits.south = 'Room C';
+            // Adding A->B north should NOT overwrite B->south
+            mapManager.addConnection('Room A', 'Room B', 'north');
+            expect(mapManager.getRoom('Room B').exits.south).toBe('Room C');
+        });
+
+        test('unknown direction does not create reverse', () => {
+            mapManager.addRoom('Room A', {});
+            mapManager.addRoom('Room B', {});
+            mapManager.addConnection('Room A', 'Room B', 'across');
+            expect(mapManager.getRoom('Room A').exits.across).toBe('Room B');
+            expect(Object.keys(mapManager.getRoom('Room B').exits)).toHaveLength(0);
+        });
+    });
+
+    describe('purgeDeleted', () => {
+        test('purgeDeleted removes soft-deleted rooms', () => {
+            mapManager.addRoom('Room A', {});
+            mapManager.addRoom('Room B', {});
+            mapManager.deleteRoom('Room A');
+            mapManager.purgeDeleted();
+            expect(mapManager.getRoom('Room A')).toBeUndefined();
+            expect(mapManager.getRoom('Room B')).toBeDefined();
+        });
+
+        test('purgeDeleted cleans dangling exit references', () => {
+            mapManager.addRoom('Room A', {});
+            mapManager.addRoom('Room B', {});
+            mapManager.addConnection('Room A', 'Room B', 'north');
+            mapManager.deleteRoom('Room B');
+            mapManager.purgeDeleted();
+            expect(mapManager.getRoom('Room A').exits.north).toBeUndefined();
+        });
+
+        test('purgeDeleted is triggered automatically after 20 deletions', () => {
+            // Add 21 rooms and delete them all; after the 20th deletion purge fires
+            for (let i = 0; i < 21; i++) {
+                mapManager.addRoom(`Room ${i}`, {});
+            }
+            for (let i = 0; i < 20; i++) {
+                mapManager.deleteRoom(`Room ${i}`);
+            }
+            // After 20 deletions the purge has fired, so deleted rooms are gone
+            for (let i = 0; i < 20; i++) {
+                expect(mapManager.getRoom(`Room ${i}`)).toBeUndefined();
+            }
+            // Room 20 was never deleted
+            expect(mapManager.getRoom('Room 20')).toBeDefined();
+        });
+    });
 });

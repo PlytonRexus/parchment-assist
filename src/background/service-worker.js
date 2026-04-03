@@ -157,7 +157,16 @@ Analyze the text and return a JSON object with ALL of the following fields: "loc
   "mapData": {
     "roomName": "string",
     "exits": [{"direction": "string", "room": "string"}]
-  }
+  },
+  "interactables": [
+    {
+      "name": "string",
+      "type": "object" | "npc" | "exit",
+      "actions": [
+        {"command": "string", "label": "string", "confidence": 0.0}
+      ]
+    }
+  ]
 }
 
 **Instructions:**
@@ -167,6 +176,15 @@ Analyze the text and return a JSON object with ALL of the following fields: "loc
 *   **Verbs:** From the list below, select up to 10 verbs that are most relevant to the current game text.
     ["ATTACK", "ASK", "BUY", "CLIMB", "CLOSE", "CUT", "DIG", "DRINK", "DROP", "EAT", "ENTER", "EXAMINE", "FILL", "GIVE", "INVENTORY", "JUMP", "LISTEN", "LOOK", "MOVE", "OPEN", "PULL", "PUSH", "READ", "SEARCH", "SIT", "SLEEP", "SMELL", "STAND", "TAKE", "TALK TO", "THROW", "TIE", "TURN ON", "TURN OFF", "UNLOCK", "USE", "WAIT", "WEAR"]
 *   **Exits:** Return an array of objects, where each object has a "direction" and "room" property. If the room name is not mentioned, use "an unknown area".
+*   **Interactables:** For every object, NPC, and navigable exit in the scene, create an entry in "interactables". Each entry must have:
+    - **name:** The item/NPC/direction name (e.g., "rusty key", "old wizard", "north")
+    - **type:** One of "object", "npc", or "exit"
+    - **actions:** An array of 2-5 contextually appropriate parser commands for this specific interactable, sorted by confidence (highest first). Each action has:
+      - **command:** The full parser command (e.g., "take rusty key", "ask old wizard about the quest")
+      - **label:** A short verb label (e.g., "Take", "Ask about quest")
+      - **confidence:** A float 0.0–1.0 indicating how useful this action is given the current context
+    - Example: {"name": "rusty key", "type": "object", "actions": [{"command": "take rusty key", "label": "Take", "confidence": 0.95}, {"command": "examine rusty key", "label": "Examine", "confidence": 0.85}]}
+    - Example exit: {"name": "north", "type": "exit", "actions": [{"command": "go north", "label": "Go north", "confidence": 0.90}]}
 *   **Suggested Actions**: This is CRITICAL for choice-based gameplay. Based on the current situation, suggest 4-6 highly plausible, contextual actions the player would realistically want to take next. These should be:
     - Complete, actionable parser commands (e.g., "examine the rusty key", "ask guard about the prisoner", "unlock door with brass key")
     - Directly relevant to the current scene, available objects, NPCs, and story context
@@ -196,6 +214,36 @@ Analyze the text and return a JSON object with ALL of the following fields: "loc
 
         // Validate and sanitize the LLM response
         if (response && typeof response === 'object' && !Array.isArray(response)) {
+            const rawInteractables = Array.isArray(response.interactables)
+                ? response.interactables
+                : [];
+            // Sanitise each interactable — keep only well-formed entries
+            const interactables = rawInteractables
+                .filter(
+                    (i) =>
+                        i &&
+                        typeof i.name === 'string' &&
+                        ['object', 'npc', 'exit'].includes(i.type) &&
+                        Array.isArray(i.actions)
+                )
+                .map((i) => ({
+                    name: i.name,
+                    type: i.type,
+                    actions: i.actions
+                        .filter(
+                            (a) => a && typeof a.command === 'string' && typeof a.label === 'string'
+                        )
+                        .map((a) => ({
+                            command: a.command,
+                            label: a.label,
+                            confidence:
+                                typeof a.confidence === 'number'
+                                    ? Math.min(1, Math.max(0, a.confidence))
+                                    : 0.5,
+                        }))
+                        .sort((a, b) => b.confidence - a.confidence),
+                }));
+
             const validated = {
                 location: typeof response.location === 'string' ? response.location : '',
                 inventory: Array.isArray(response.inventory) ? response.inventory : [],
@@ -219,6 +267,7 @@ Analyze the text and return a JSON object with ALL of the following fields: "loc
                     !Array.isArray(response.mapData)
                         ? response.mapData
                         : { roomName: response.location || '', exits: response.exits || [] },
+                interactables,
             };
 
             // Ensure mapData has the required structure
@@ -227,6 +276,25 @@ Analyze the text and return a JSON object with ALL of the following fields: "loc
             }
             if (!Array.isArray(validated.mapData.exits)) {
                 validated.mapData.exits = validated.exits;
+            }
+
+            // Backward compat: derive old fields from interactables when those fields are empty
+            if (interactables.length > 0) {
+                if (!validated.objects.length) {
+                    validated.objects = interactables
+                        .filter((i) => i.type === 'object')
+                        .map((i) => i.name);
+                }
+                if (!validated.npcs.length) {
+                    validated.npcs = interactables
+                        .filter((i) => i.type === 'npc')
+                        .map((i) => i.name);
+                }
+                if (!validated.exits.length) {
+                    validated.exits = interactables
+                        .filter((i) => i.type === 'exit')
+                        .map((i) => ({ direction: i.name, room: '' }));
+                }
             }
 
             return validated;
@@ -245,6 +313,7 @@ Analyze the text and return a JSON object with ALL of the following fields: "loc
             suggestedActions: [],
             npcProfiles: {},
             mapData: { roomName: '', exits: [] },
+            interactables: [],
         };
     }
 
@@ -291,7 +360,7 @@ Analyze the text and return a JSON object with ALL of the following fields: "loc
 
         try {
             const response = await fetch(
-                'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent',
+                'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent',
                 {
                     method: 'POST',
                     headers: {

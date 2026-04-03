@@ -3,15 +3,31 @@
  * Tests error scenarios and edge cases to ensure stability
  */
 
-import { ParchmentAssist } from '../../src/content/content.js';
+import { jest } from '@jest/globals';
+import { UIManager } from '../../src/ui/uiManager.js';
+import { GameStateManager } from '../../src/content/gameStateManager.js';
 import { MapManager } from '../../src/lib/mapManager.js';
 import { NpcProfiler } from '../../src/lib/npc.js';
 import { HTMLCleaner } from '../../src/helpers/htmlCleaner.js';
 import { AdvancedGameStateExtractor } from '../../src/helpers/textMiner.js';
 
+function createUIManager(overrides = {}) {
+    const npcProfiler = overrides.npcProfiler || new NpcProfiler();
+    const mapManager = overrides.mapManager || new MapManager();
+    const ui = new UIManager({
+        npcProfiler,
+        mapManager,
+        onCommandSubmit: jest.fn(),
+        onChoiceSubmit: jest.fn(),
+        onRefresh: jest.fn(),
+        onClearJournal: jest.fn(),
+    });
+    return { ui, npcProfiler, mapManager };
+}
+
 describe('Error Handling', () => {
-    describe('ParchmentAssist Null Safety', () => {
-        let assist;
+    describe('GameStateManager Null Safety', () => {
+        let gsm;
 
         beforeEach(() => {
             document.body.innerHTML = `
@@ -20,7 +36,7 @@ describe('Error Handling', () => {
         </div>
         <input type="text" id="input" />
       `;
-            assist = new ParchmentAssist();
+            gsm = new GameStateManager();
         });
 
         afterEach(() => {
@@ -29,30 +45,42 @@ describe('Error Handling', () => {
 
         test('should handle missing input field gracefully', () => {
             document.body.innerHTML = '<div id="gameport">Text only</div>';
-            const newAssist = new ParchmentAssist();
-
-            const inputField = newAssist.findInputField();
+            const inputField = gsm.findInputField();
             expect(inputField).toBeNull();
         });
 
         test('should handle missing output area gracefully', () => {
             document.body.innerHTML = '<input type="text" />';
-            const newAssist = new ParchmentAssist();
-
-            const outputArea = newAssist.findOutputArea();
+            const outputArea = gsm.findOutputArea();
             expect(outputArea).toBeNull();
         });
 
         test('should return null when extracting game state with missing DOM', async () => {
             document.body.innerHTML = ''; // Remove all DOM
-
-            // Current implementation returns null silently instead of throwing
-            const result = await assist.extractRawGameState();
+            const result = await gsm.extractRawGameState();
             expect(result).toBeNull();
+        });
+    });
+
+    describe('UIManager Null Safety', () => {
+        let ui;
+
+        beforeEach(() => {
+            document.body.innerHTML = `
+        <div id="gameport">
+          <div class="BufferLine">Test</div>
+        </div>
+        <input type="text" id="input" />
+      `;
+            ({ ui } = createUIManager());
+        });
+
+        afterEach(() => {
+            document.body.innerHTML = '';
         });
 
         test('should handle null commandPalette in updateCommandPalette', () => {
-            assist.commandPalette = null;
+            ui.commandPalette = null;
 
             const state = {
                 location: 'Room',
@@ -67,12 +95,12 @@ describe('Error Handling', () => {
             };
 
             expect(() => {
-                assist.updateCommandPalette(state);
+                ui.updateCommandPalette(state, 0);
             }).not.toThrow();
         });
 
         test('should handle missing palette-content in updateCommandPalette', () => {
-            assist.createCommandPalette();
+            ui.createCommandPalette();
 
             // Remove palette-content
             const paletteContent = document.querySelector('.palette-content');
@@ -93,7 +121,7 @@ describe('Error Handling', () => {
             };
 
             expect(() => {
-                assist.updateCommandPalette(state);
+                ui.updateCommandPalette(state, 0);
             }).not.toThrow();
         });
     });
@@ -205,8 +233,8 @@ describe('Error Handling', () => {
             const profile = npcProfiler.getProfile('Gandalf');
             expect(profile.description).toBe('A wizard');
             expect(profile.location).toBe('Rivendell');
-            // Note: Shallow merge means dialogue array is replaced, not merged
-            expect(profile.dialogue).toEqual(['Line 2']);
+            // Deep merge: dialogue arrays are appended, not replaced
+            expect(profile.dialogue).toEqual(['Line 1', 'Line 2']);
         });
     });
 
@@ -330,7 +358,7 @@ describe('Error Handling', () => {
     });
 
     describe('Rendering Edge Cases', () => {
-        let assist;
+        let ui;
 
         beforeEach(() => {
             document.body.innerHTML = `
@@ -339,8 +367,8 @@ describe('Error Handling', () => {
         </div>
         <input type="text" id="input" />
       `;
-            assist = new ParchmentAssist();
-            assist.createCommandPalette();
+            ({ ui } = createUIManager());
+            ui.createCommandPalette();
         });
 
         afterEach(() => {
@@ -355,7 +383,7 @@ describe('Error Handling', () => {
             const items = [longName];
 
             expect(() => {
-                assist.renderList(container, items, 'test');
+                ui.renderList(container, items, 'test');
             }).not.toThrow();
 
             const renderedItems = container.querySelectorAll('.palette-item');
@@ -372,7 +400,7 @@ describe('Error Handling', () => {
             const specialItems = ['<script>alert("xss")</script>', '"quoted"', "it's"];
 
             expect(() => {
-                assist.renderList(container, specialItems, 'test');
+                ui.renderList(container, specialItems, 'test');
             }).not.toThrow();
 
             const renderedItems = container.querySelectorAll('.palette-item');
@@ -391,7 +419,7 @@ describe('Error Handling', () => {
             const largeList = Array.from({ length: 1000 }, (_, i) => `item${i}`);
 
             expect(() => {
-                assist.renderList(container, largeList, 'test');
+                ui.renderList(container, largeList, 'test');
             }).not.toThrow();
 
             const renderedItems = container.querySelectorAll('.palette-item');
@@ -411,21 +439,21 @@ describe('Error Handling', () => {
 
             testStates.forEach((state) => {
                 expect(() => {
-                    assist.updateCommandPalette(state);
+                    ui.updateCommandPalette(state, 0);
                 }).not.toThrow();
             });
         });
     });
 
     describe('XSS Prevention in Toasts', () => {
-        let assist;
+        let ui;
 
         beforeEach(() => {
             document.body.innerHTML = `
         <div id="gameport"><div class="BufferLine">Test</div></div>
         <input type="text" id="input" />
       `;
-            assist = new ParchmentAssist();
+            ({ ui } = createUIManager());
         });
 
         afterEach(() => {
@@ -434,7 +462,7 @@ describe('Error Handling', () => {
 
         test('showError should render XSS payload as text, not HTML', () => {
             const xssPayload = '<img src=x onerror="window.__xss=true">';
-            assist.showError(xssPayload);
+            ui.showError(xssPayload);
 
             const toast = document.querySelector('.parchment-assist-toast-error');
             expect(toast).not.toBeNull();
@@ -450,7 +478,7 @@ describe('Error Handling', () => {
 
         test('showStatus should render XSS payload as text, not HTML', () => {
             const xssPayload = '<script>window.__xss2=true</script>';
-            assist.showStatus(xssPayload);
+            ui.showStatus(xssPayload);
 
             const toast = document.querySelector('.parchment-assist-toast-success');
             expect(toast).not.toBeNull();
@@ -464,7 +492,8 @@ describe('Error Handling', () => {
     });
 
     describe('XSS Prevention in Map Rendering', () => {
-        let assist;
+        let ui;
+        let mapManager;
 
         beforeEach(() => {
             document.body.innerHTML = `
@@ -472,7 +501,7 @@ describe('Error Handling', () => {
         <input type="text" id="input" />
         <div id="room-list"></div>
       `;
-            assist = new ParchmentAssist();
+            ({ ui, mapManager } = createUIManager());
         });
 
         afterEach(() => {
@@ -481,8 +510,8 @@ describe('Error Handling', () => {
 
         test('renderMap should escape XSS in room names', () => {
             const xssRoomName = '<img src=x onerror="window.__xssMap=true">';
-            assist.mapManager.addRoom(xssRoomName, { items: [], exits: [] });
-            assist.renderMap();
+            mapManager.addRoom(xssRoomName, { items: [], exits: [] });
+            ui.renderMap();
 
             const roomList = document.getElementById('room-list');
             expect(roomList.querySelector('img')).toBeNull();
@@ -494,8 +523,8 @@ describe('Error Handling', () => {
 
         test('renderMap should escape XSS in item names', () => {
             const xssItem = '<script>window.__xssItem=true</script>';
-            assist.mapManager.addRoom('Safe Room', { items: [xssItem], exits: [] });
-            assist.renderMap();
+            mapManager.addRoom('Safe Room', { items: [xssItem], exits: [] });
+            ui.renderMap();
 
             const roomList = document.getElementById('room-list');
             expect(roomList.querySelector('script')).toBeNull();
@@ -505,9 +534,9 @@ describe('Error Handling', () => {
         });
 
         test('delete room button removes room from display', () => {
-            assist.mapManager.addRoom('Room A', { items: [], exits: [] });
-            assist.mapManager.addRoom('Room B', { items: [], exits: [] });
-            assist.renderMap();
+            mapManager.addRoom('Room A', { items: [], exits: [] });
+            mapManager.addRoom('Room B', { items: [], exits: [] });
+            ui.renderMap();
 
             const deleteBtn = document.querySelector('.delete-room-btn[data-room-name="Room A"]');
             expect(deleteBtn).not.toBeNull();
@@ -523,7 +552,8 @@ describe('Error Handling', () => {
     });
 
     describe('XSS Prevention in Profile Rendering', () => {
-        let assist;
+        let ui;
+        let npcProfiler;
 
         beforeEach(() => {
             document.body.innerHTML = `
@@ -531,7 +561,7 @@ describe('Error Handling', () => {
         <input type="text" id="input" />
         <div id="palette-profiles"></div>
       `;
-            assist = new ParchmentAssist();
+            ({ ui, npcProfiler } = createUIManager());
         });
 
         afterEach(() => {
@@ -540,10 +570,10 @@ describe('Error Handling', () => {
 
         test('renderProfiles should escape XSS in NPC names', () => {
             const xssName = '<img src=x onerror="window.__xssProfile=true">';
-            assist.npcProfiler.updateProfiles({
+            npcProfiler.updateProfiles({
                 [xssName]: { location: 'Town', description: 'A person', dialogue: ['Hello'] },
             });
-            assist.renderProfiles();
+            ui.renderProfiles();
 
             const container = document.getElementById('palette-profiles');
             expect(container.querySelector('img')).toBeNull();
@@ -554,10 +584,10 @@ describe('Error Handling', () => {
 
         test('renderProfiles should escape XSS in NPC location', () => {
             const xssLocation = '<script>window.__xssLoc=true</script>';
-            assist.npcProfiler.updateProfiles({
+            npcProfiler.updateProfiles({
                 Villager: { location: xssLocation, dialogue: [] },
             });
-            assist.renderProfiles();
+            ui.renderProfiles();
 
             const container = document.getElementById('palette-profiles');
             expect(container.querySelector('script')).toBeNull();
@@ -566,10 +596,10 @@ describe('Error Handling', () => {
 
         test('renderProfiles should escape XSS in NPC description', () => {
             const xssDesc = '<img src=x onerror="window.__xssDesc=true">';
-            assist.npcProfiler.updateProfiles({
+            npcProfiler.updateProfiles({
                 Guard: { location: 'Gate', description: xssDesc, dialogue: [] },
             });
-            assist.renderProfiles();
+            ui.renderProfiles();
 
             const container = document.getElementById('palette-profiles');
             expect(container.querySelector('img')).toBeNull();
@@ -579,19 +609,19 @@ describe('Error Handling', () => {
 
     describe('Memory and Resource Management', () => {
         test('should not leak event listeners on multiple renderList calls', () => {
-            const assist = new ParchmentAssist();
-            const container = document.createElement('div');
             document.body.innerHTML = `
         <div id="gameport"><div class="BufferLine">Test</div></div>
         <input type="text" id="input" />
       `;
+            const { ui } = createUIManager();
+            const container = document.createElement('div');
             document.body.appendChild(container);
 
-            assist.createCommandPalette();
+            ui.createCommandPalette();
 
             // Render multiple times
             for (let i = 0; i < 100; i++) {
-                assist.renderList(container, [`item${i}`], 'test');
+                ui.renderList(container, [`item${i}`], 'test');
             }
 
             // Should only have last set of items
@@ -603,13 +633,12 @@ describe('Error Handling', () => {
         });
 
         test('should handle rapid successive updateCommandPalette calls', () => {
-            const assist = new ParchmentAssist();
             document.body.innerHTML = `
         <div id="gameport"><div class="BufferLine">Test</div></div>
         <input type="text" id="input" />
       `;
-
-            assist.createCommandPalette();
+            const { ui } = createUIManager();
+            ui.createCommandPalette();
 
             const state = {
                 location: 'Room',
@@ -626,7 +655,7 @@ describe('Error Handling', () => {
             expect(() => {
                 for (let i = 0; i < 100; i++) {
                     state.location = `Room ${i}`;
-                    assist.updateCommandPalette(state);
+                    ui.updateCommandPalette(state, i);
                 }
             }).not.toThrow();
 

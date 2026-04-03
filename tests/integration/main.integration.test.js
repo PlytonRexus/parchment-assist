@@ -20,22 +20,25 @@ describe('Main Integration Tests', () => {
 
     it('should update the turn counter in the UI', () => {
         // Create the command palette first (which creates all the UI elements)
-        assist.createCommandPalette();
+        assist.uiManager.createCommandPalette();
 
-        assist.turnCount = 5;
+        assist.gameStateManager.turnCount = 5;
 
         // Update the palette with minimal data
-        assist.updateCommandPalette({
-            location: 'Test Room',
-            inventory: [],
-            objects: [],
-            npcs: [],
-            exits: [],
-            verbs: [],
-            quests: [],
-            npcProfiles: {},
-            suggestedActions: [],
-        });
+        assist.uiManager.updateCommandPalette(
+            {
+                location: 'Test Room',
+                inventory: [],
+                objects: [],
+                npcs: [],
+                exits: [],
+                verbs: [],
+                quests: [],
+                npcProfiles: {},
+                suggestedActions: [],
+            },
+            assist.gameStateManager.turnCount
+        );
 
         const turnCounterUI = document.querySelector('#palette-turn-counter');
         expect(turnCounterUI.textContent).toContain('5');
@@ -43,25 +46,28 @@ describe('Main Integration Tests', () => {
 
     it('should display NPC profiles in the UI when updated', () => {
         // Create the command palette first
-        assist.createCommandPalette();
+        assist.uiManager.createCommandPalette();
 
         assist.npcProfiler.updateProfiles({ Gandalf: { description: 'A wizard' } });
 
         // Update the palette
-        assist.updateCommandPalette({
-            location: 'Test Room',
-            inventory: [],
-            objects: [],
-            npcs: [],
-            exits: [],
-            verbs: [],
-            quests: [],
-            npcProfiles: { Gandalf: { description: 'A wizard' } },
-            suggestedActions: [],
-        });
+        assist.uiManager.updateCommandPalette(
+            {
+                location: 'Test Room',
+                inventory: [],
+                objects: [],
+                npcs: [],
+                exits: [],
+                verbs: [],
+                quests: [],
+                npcProfiles: { Gandalf: { description: 'A wizard' } },
+                suggestedActions: [],
+            },
+            0
+        );
 
         // Switch to Profiles tab to see the profiles
-        assist.switchTab('profiles');
+        assist.uiManager.switchTab('profiles');
 
         const profileCard = document.querySelector('#palette-profiles .profile-card');
         expect(profileCard).toBeTruthy();

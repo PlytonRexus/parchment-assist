@@ -264,6 +264,15 @@ You see a key.
             expect(state.npcs).not.toContain('Door');
         });
 
+        test('should filter out common IF nouns (Room, Hall, Key, Sword, etc.)', () => {
+            const ifNouns = ['Room', 'Hall', 'Key', 'Sword', 'Lamp', 'Table', 'Chair', 'Lantern'];
+            for (const noun of ifNouns) {
+                const gameText = `The ${noun} says something.`;
+                const state = AdvancedGameStateExtractor.parse(gameText);
+                expect(state.npcs).not.toContain(noun);
+            }
+        });
+
         test('should extract NPCs when present', () => {
             const gameText = 'The Wizard is examining a scroll.';
 
@@ -404,6 +413,7 @@ You are carrying: a brass lantern
             expect(state.npcs).toEqual([]);
             expect(state.exits).toEqual([]);
             expect(state.roomDescription).toBe('');
+            expect(state.recentActions).toBeUndefined();
         });
 
         test('should handle null input', () => {
@@ -415,6 +425,7 @@ You are carrying: a brass lantern
             expect(state.npcs).toEqual([]);
             expect(state.exits).toEqual([]);
             expect(state.roomDescription).toBe('');
+            expect(state.recentActions).toBeUndefined();
         });
     });
 });

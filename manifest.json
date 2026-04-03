@@ -36,6 +36,9 @@
     {
       "resources": [
         "src/content/content.js",
+        "src/content/gameStateManager.js",
+        "src/content/commandExecutor.js",
+        "src/ui/uiManager.js",
         "src/helpers/htmlCleaner.js",
         "src/lib/npc.js",
         "src/lib/mapManager.js"

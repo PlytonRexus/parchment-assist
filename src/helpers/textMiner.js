@@ -8,7 +8,6 @@ export class AdvancedGameStateExtractor {
             npcs: [],
             exits: [],
             roomDescription: '',
-            recentActions: [],
         };
 
         if (!gameText) {
@@ -199,7 +198,7 @@ export class AdvancedGameStateExtractor {
             return false;
         }
 
-        // Common non-NPC words to filter out
+        // Common non-NPC words to filter out (IF nouns and pronouns)
         const nonNpcWords = [
             'You',
             'The',
@@ -210,6 +209,24 @@ export class AdvancedGameStateExtractor {
             'Door',
             'Window',
             'Wall',
+            'Room',
+            'Hall',
+            'Hallway',
+            'Key',
+            'Sword',
+            'Lamp',
+            'Lantern',
+            'Table',
+            'Chair',
+            'Floor',
+            'Ceiling',
+            'Passage',
+            'Corridor',
+            'Stairs',
+            'North',
+            'South',
+            'East',
+            'West',
         ];
 
         return !nonNpcWords.includes(text);

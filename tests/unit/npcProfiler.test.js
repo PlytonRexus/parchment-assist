@@ -36,6 +36,44 @@ describe('NpcProfiler', () => {
             location: 'The Shire',
         });
     });
+
+    it('should deep merge dialogue arrays (append, not replace)', () => {
+        npcProfiler.updateProfiles({ Guard: { dialogue: ['Hello'] } });
+        npcProfiler.updateProfiles({ Guard: { dialogue: ['Stop!'] } });
+        const profile = npcProfiler.getProfile('Guard');
+        expect(profile.dialogue).toEqual(['Hello', 'Stop!']);
+    });
+
+    it('should deduplicate dialogue entries', () => {
+        npcProfiler.updateProfiles({ Guard: { dialogue: ['Hello'] } });
+        npcProfiler.updateProfiles({ Guard: { dialogue: ['Hello', 'Stop!'] } });
+        const profile = npcProfiler.getProfile('Guard');
+        expect(profile.dialogue).toEqual(['Hello', 'Stop!']);
+    });
+
+    it('should accumulate dialogue across multiple updates', () => {
+        npcProfiler.updateProfiles({ Merchant: { dialogue: ['Welcome!'] } });
+        npcProfiler.updateProfiles({ Merchant: { dialogue: ['Buy something?'] } });
+        npcProfiler.updateProfiles({ Merchant: { dialogue: ['Good day!'] } });
+        const profile = npcProfiler.getProfile('Merchant');
+        expect(profile.dialogue).toEqual(['Welcome!', 'Buy something?', 'Good day!']);
+    });
+
+    it('getProfile should return an immutable copy, not the internal reference', () => {
+        npcProfiler.updateProfiles({ Wizard: { description: 'Mysterious', dialogue: ['Boo!'] } });
+        const profile = npcProfiler.getProfile('Wizard');
+        // Mutate the returned copy
+        profile.description = 'Changed';
+        profile.dialogue.push('Extra');
+        // Internal state must be unchanged
+        const profile2 = npcProfiler.getProfile('Wizard');
+        expect(profile2.description).toBe('Mysterious');
+        expect(profile2.dialogue).toEqual(['Boo!']);
+    });
+
+    it('should return undefined for unknown NPC', () => {
+        expect(npcProfiler.getProfile('Nobody')).toBeUndefined();
+    });
 });
 
 describe('showNpcProfile', () => {
@@ -51,8 +89,8 @@ describe('showNpcProfile', () => {
     `;
         assist = new ParchmentAssist();
 
-        // Create the command palette (which creates npcModal)
-        assist.createCommandPalette();
+        // Create the command palette (which creates npcModal) via UIManager
+        assist.uiManager.createCommandPalette();
 
         assist.npcProfiler.updateProfiles({
             Gandalf: {
@@ -68,7 +106,7 @@ describe('showNpcProfile', () => {
     });
 
     it('should display the NPC profile information', () => {
-        assist.showNpcProfile('Gandalf');
+        assist.uiManager.showNpcProfile('Gandalf');
         expect(document.getElementById('npc-modal-name').textContent).toBe('Gandalf');
         expect(document.getElementById('npc-modal-location').textContent).toBe('Moria');
         expect(document.getElementById('npc-modal-description').textContent).toBe('A wise wizard');

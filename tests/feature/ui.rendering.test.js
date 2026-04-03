@@ -3,10 +3,15 @@
  * Tests DOM manipulation and UI rendering functionality
  */
 
-import { ParchmentAssist } from '../../src/content/content.js';
+import { jest } from '@jest/globals';
+import { UIManager } from '../../src/ui/uiManager.js';
+import { NpcProfiler } from '../../src/lib/npc.js';
+import { MapManager } from '../../src/lib/mapManager.js';
 
 describe('UI Rendering', () => {
-    let assist;
+    let uiManager;
+    let npcProfiler;
+    let mapManager;
 
     beforeEach(() => {
         // Setup minimal DOM
@@ -17,8 +22,19 @@ describe('UI Rendering', () => {
       <input type="text" id="input" />
     `;
 
-        assist = new ParchmentAssist();
-        assist.createCommandPalette();
+        npcProfiler = new NpcProfiler();
+        mapManager = new MapManager();
+        uiManager = new UIManager({
+            npcProfiler,
+            mapManager,
+            onCommandSubmit: jest.fn(),
+            onChoiceSubmit: jest.fn(),
+            onRefresh: jest.fn(),
+            onClearJournal: jest.fn(),
+        });
+        uiManager.createCommandPalette();
+        // Use classic view so existing rendering tests see verb/object/NPC/exit sections
+        uiManager.classicView = true;
     });
 
     afterEach(() => {
@@ -39,7 +55,7 @@ describe('UI Rendering', () => {
                 npcProfiles: {},
             };
 
-            assist.updateCommandPalette(state);
+            uiManager.updateCommandPalette(state, 0);
 
             const locationEl = document.querySelector('#palette-location');
             expect(locationEl.textContent).toContain('📍');
@@ -59,7 +75,7 @@ describe('UI Rendering', () => {
                 npcProfiles: {},
             };
 
-            assist.updateCommandPalette(state);
+            uiManager.updateCommandPalette(state, 0);
 
             const inventoryEl = document.querySelector('#palette-inventory');
             expect(inventoryEl.textContent).toContain('🎒');
@@ -79,7 +95,7 @@ describe('UI Rendering', () => {
                 npcProfiles: {},
             };
 
-            assist.updateCommandPalette(state);
+            uiManager.updateCommandPalette(state, 0);
 
             const inventoryEl = document.querySelector('#palette-inventory');
             expect(inventoryEl.textContent).toContain('sword');
@@ -88,8 +104,6 @@ describe('UI Rendering', () => {
         });
 
         test('should render turn counter', () => {
-            assist.turnCount = 42;
-
             const state = {
                 location: 'Room',
                 inventory: [],
@@ -102,7 +116,7 @@ describe('UI Rendering', () => {
                 npcProfiles: {},
             };
 
-            assist.updateCommandPalette(state);
+            uiManager.updateCommandPalette(state, 42);
 
             const turnEl = document.querySelector('#palette-turn-counter');
             expect(turnEl.textContent).toContain('42');
@@ -121,7 +135,7 @@ describe('UI Rendering', () => {
                 npcProfiles: {},
             };
 
-            assist.updateCommandPalette(state);
+            uiManager.updateCommandPalette(state, 0);
 
             const verbsContainer = document.querySelector('#palette-verbs');
             const verbItems = verbsContainer.querySelectorAll('.palette-item');
@@ -148,7 +162,7 @@ describe('UI Rendering', () => {
                 npcProfiles: {},
             };
 
-            assist.updateCommandPalette(state);
+            uiManager.updateCommandPalette(state, 0);
 
             const verbsContainer = document.querySelector('#palette-verbs');
             const verbItems = verbsContainer.querySelectorAll('.palette-item');
@@ -171,7 +185,7 @@ describe('UI Rendering', () => {
                 npcProfiles: {},
             };
 
-            assist.updateCommandPalette(state);
+            uiManager.updateCommandPalette(state, 0);
 
             const objectsContainer = document.querySelector('#palette-objects');
             const objectItems = objectsContainer.querySelectorAll('.palette-item');
@@ -197,7 +211,7 @@ describe('UI Rendering', () => {
                 npcProfiles: {},
             };
 
-            assist.updateCommandPalette(state);
+            uiManager.updateCommandPalette(state, 0);
 
             const npcsContainer = document.querySelector('#palette-npcs');
             const npcItems = npcsContainer.querySelectorAll('.palette-item');
@@ -226,7 +240,7 @@ describe('UI Rendering', () => {
                 npcProfiles: {},
             };
 
-            assist.updateCommandPalette(state);
+            uiManager.updateCommandPalette(state, 0);
 
             const exitsContainer = document.querySelector('#palette-exits');
             const exitItems = exitsContainer.querySelectorAll('.palette-item');
@@ -248,7 +262,7 @@ describe('UI Rendering', () => {
                 npcProfiles: {},
             };
 
-            assist.updateCommandPalette(state);
+            uiManager.updateCommandPalette(state, 0);
 
             const exitsContainer = document.querySelector('#palette-exits');
             const exitItems = exitsContainer.querySelectorAll('.palette-item');
@@ -264,7 +278,7 @@ describe('UI Rendering', () => {
         });
 
         test('should render NPC profiles in Profiles tab', () => {
-            assist.npcProfiler.updateProfiles({
+            npcProfiler.updateProfiles({
                 Gandalf: {
                     description: 'A wizard',
                     location: 'Rivendell',
@@ -278,7 +292,7 @@ describe('UI Rendering', () => {
             });
 
             // Switch to Profiles tab to render profiles
-            assist.switchTab('profiles');
+            uiManager.switchTab('profiles');
 
             const profilesContainer = document.querySelector('#palette-profiles');
             const profileCards = profilesContainer.querySelectorAll('.profile-card');
@@ -306,7 +320,7 @@ describe('UI Rendering', () => {
                 npcProfiles: {},
             };
 
-            assist.updateCommandPalette(state);
+            uiManager.updateCommandPalette(state, 0);
 
             const actionsContainer = document.querySelector('#palette-actions');
             const actionItems = actionsContainer.querySelectorAll('.palette-item');
@@ -326,7 +340,7 @@ describe('UI Rendering', () => {
             document.body.appendChild(container);
 
             const items = ['item1', 'item2', 'item3'];
-            assist.renderList(container, items, 'test-type');
+            uiManager.renderList(container, items, 'test-type');
 
             const listItems = container.querySelectorAll('.palette-item');
             expect(listItems.length).toBe(3);
@@ -343,7 +357,7 @@ describe('UI Rendering', () => {
             document.body.appendChild(container);
 
             const items = ['item1', 'item2', 'item1', 'item3', 'item2'];
-            assist.renderList(container, items, 'test-type');
+            uiManager.renderList(container, items, 'test-type');
 
             const listItems = container.querySelectorAll('.palette-item');
             // Should only have 3 unique items
@@ -363,7 +377,7 @@ describe('UI Rendering', () => {
             document.body.appendChild(container);
 
             const items = ['new1', 'new2'];
-            assist.renderList(container, items, 'test-type');
+            uiManager.renderList(container, items, 'test-type');
 
             expect(container.textContent).not.toContain('old content');
             expect(container.textContent).toContain('new1');
@@ -376,7 +390,7 @@ describe('UI Rendering', () => {
             const container = document.createElement('div');
             document.body.appendChild(container);
 
-            assist.renderList(container, [], 'test-type');
+            uiManager.renderList(container, [], 'test-type');
 
             const listItems = container.querySelectorAll('.palette-item');
             expect(listItems.length).toBe(0);
@@ -387,7 +401,7 @@ describe('UI Rendering', () => {
         test('should handle null container gracefully', () => {
             // Should not throw error
             expect(() => {
-                assist.renderList(null, ['item1'], 'test-type');
+                uiManager.renderList(null, ['item1'], 'test-type');
             }).not.toThrow();
         });
     });
@@ -402,7 +416,7 @@ describe('UI Rendering', () => {
                 { description: 'Defeat the dragon', status: 'active' },
             ];
 
-            assist.renderJournal(container, quests);
+            uiManager.renderJournal(container, quests);
 
             expect(container.textContent).toContain('Find the key');
             expect(container.textContent).toContain('Defeat the dragon');
@@ -419,7 +433,7 @@ describe('UI Rendering', () => {
                 { description: 'Defeat the dragon', status: 'active' },
             ];
 
-            assist.renderJournal(container, quests);
+            uiManager.renderJournal(container, quests);
 
             const questElements = container.querySelectorAll('.journal-entry');
             expect(questElements.length).toBe(2);
@@ -438,7 +452,7 @@ describe('UI Rendering', () => {
             const container = document.createElement('div');
             document.body.appendChild(container);
 
-            assist.renderJournal(container, []);
+            uiManager.renderJournal(container, []);
 
             // Empty quest list shows empty state message
             const emptyState = container.querySelector('.empty-state');
@@ -453,14 +467,14 @@ describe('UI Rendering', () => {
 
         test('should handle null container gracefully', () => {
             expect(() => {
-                assist.renderJournal(null, [{ description: 'Quest', status: 'active' }]);
+                uiManager.renderJournal(null, [{ description: 'Quest', status: 'active' }]);
             }).not.toThrow();
         });
     });
 
     describe('NPC Modal', () => {
         test('should display NPC modal with profile data', () => {
-            assist.npcProfiler.updateProfiles({
+            npcProfiler.updateProfiles({
                 Gandalf: {
                     description: 'A wise wizard',
                     location: 'Rivendell',
@@ -468,7 +482,7 @@ describe('UI Rendering', () => {
                 },
             });
 
-            assist.showNpcProfile('Gandalf');
+            uiManager.showNpcProfile('Gandalf');
 
             const modal = document.querySelector('#parchment-assist-npc-modal');
             expect(modal.style.display).toBe('block');
@@ -486,11 +500,11 @@ describe('UI Rendering', () => {
         });
 
         test('should handle NPC with minimal profile data', () => {
-            assist.npcProfiler.updateProfiles({
+            npcProfiler.updateProfiles({
                 Guard: {},
             });
 
-            assist.showNpcProfile('Guard');
+            uiManager.showNpcProfile('Guard');
 
             const modal = document.querySelector('#parchment-assist-npc-modal');
             expect(modal.style.display).toBe('block');
@@ -500,7 +514,7 @@ describe('UI Rendering', () => {
 
         test('should handle non-existent NPC gracefully', () => {
             expect(() => {
-                assist.showNpcProfile('NonExistent');
+                uiManager.showNpcProfile('NonExistent');
             }).not.toThrow();
         });
     });
@@ -508,13 +522,13 @@ describe('UI Rendering', () => {
     describe('Null/Empty State Handling', () => {
         test('should handle null state in updateCommandPalette', () => {
             expect(() => {
-                assist.updateCommandPalette(null);
+                uiManager.updateCommandPalette(null, 0);
             }).not.toThrow();
         });
 
         test('should handle undefined state in updateCommandPalette', () => {
             expect(() => {
-                assist.updateCommandPalette(undefined);
+                uiManager.updateCommandPalette(undefined, 0);
             }).not.toThrow();
         });
 
@@ -539,7 +553,7 @@ describe('UI Rendering', () => {
 
             // Should not throw even with missing section
             expect(() => {
-                assist.updateCommandPalette(state);
+                uiManager.updateCommandPalette(state, 0);
             }).not.toThrow();
         });
     });

@@ -424,6 +424,260 @@ That's the analysis.`;
         });
     });
 
+    describe('Interactables Schema', () => {
+        test('parseStateResponse handles interactables field', () => {
+            const json = JSON.stringify({
+                location: 'Garden',
+                inventory: [],
+                objects: [],
+                npcs: [],
+                exits: [],
+                verbs: [],
+                room_description: '',
+                quests: [],
+                suggestedActions: [],
+                npcProfiles: {},
+                mapData: { roomName: 'Garden', exits: [] },
+                interactables: [
+                    {
+                        name: 'flower pot',
+                        type: 'object',
+                        actions: [
+                            { command: 'examine flower pot', label: 'Examine', confidence: 0.9 },
+                            { command: 'take flower pot', label: 'Take', confidence: 0.7 },
+                        ],
+                    },
+                ],
+            });
+
+            const result = llmService.parseStateResponse(json);
+
+            expect(result).toBeDefined();
+            expect(result.interactables).toBeDefined();
+            expect(result.interactables.length).toBe(1);
+            expect(result.interactables[0].name).toBe('flower pot');
+            expect(result.interactables[0].actions.length).toBe(2);
+        });
+
+        test('extractStructuredState validates interactables — only keeps well-formed entries', async () => {
+            const gameState = {
+                gameTitle: 'Test',
+                gameText: 'Some text',
+                lastCommands: [],
+            };
+
+            const mockResponse = {
+                location: 'Hall',
+                inventory: [],
+                objects: [],
+                npcs: [],
+                exits: [],
+                verbs: [],
+                room_description: '',
+                quests: [],
+                suggestedActions: [],
+                npcProfiles: {},
+                mapData: { roomName: 'Hall', exits: [] },
+                interactables: [
+                    // Valid
+                    {
+                        name: 'torch',
+                        type: 'object',
+                        actions: [{ command: 'take torch', label: 'Take', confidence: 0.9 }],
+                    },
+                    // Invalid: missing name
+                    { type: 'object', actions: [] },
+                    // Invalid: bad type
+                    {
+                        name: 'wall',
+                        type: 'furniture',
+                        actions: [{ command: 'examine wall', label: 'Examine', confidence: 0.5 }],
+                    },
+                    // Invalid: actions not array
+                    { name: 'door', type: 'object', actions: 'bad' },
+                ],
+            };
+
+            llmService.callProviderForState = async () => mockResponse;
+
+            const result = await llmService.extractStructuredState(gameState);
+
+            // Only the first entry is valid
+            expect(result.interactables.length).toBe(1);
+            expect(result.interactables[0].name).toBe('torch');
+        });
+
+        test('extractStructuredState sorts interactable actions by confidence descending', async () => {
+            const gameState = {
+                gameTitle: 'Test',
+                gameText: 'Some text',
+                lastCommands: [],
+            };
+
+            const mockResponse = {
+                location: 'Room',
+                inventory: [],
+                objects: [],
+                npcs: [],
+                exits: [],
+                verbs: [],
+                room_description: '',
+                quests: [],
+                suggestedActions: [],
+                npcProfiles: {},
+                mapData: { roomName: 'Room', exits: [] },
+                interactables: [
+                    {
+                        name: 'key',
+                        type: 'object',
+                        actions: [
+                            { command: 'drop key', label: 'Drop', confidence: 0.3 },
+                            { command: 'take key', label: 'Take', confidence: 0.95 },
+                            { command: 'examine key', label: 'Examine', confidence: 0.7 },
+                        ],
+                    },
+                ],
+            };
+
+            llmService.callProviderForState = async () => mockResponse;
+
+            const result = await llmService.extractStructuredState(gameState);
+
+            const actions = result.interactables[0].actions;
+            expect(actions[0].confidence).toBe(0.95);
+            expect(actions[1].confidence).toBe(0.7);
+            expect(actions[2].confidence).toBe(0.3);
+        });
+
+        test('extractStructuredState derives objects from interactables when objects field is empty', async () => {
+            const gameState = {
+                gameTitle: 'Test',
+                gameText: 'Some text',
+                lastCommands: [],
+            };
+
+            const mockResponse = {
+                location: 'Room',
+                inventory: [],
+                objects: [], // empty — should be populated from interactables
+                npcs: [],
+                exits: [],
+                verbs: [],
+                room_description: '',
+                quests: [],
+                suggestedActions: [],
+                npcProfiles: {},
+                mapData: { roomName: 'Room', exits: [] },
+                interactables: [
+                    {
+                        name: 'brass key',
+                        type: 'object',
+                        actions: [{ command: 'take brass key', label: 'Take', confidence: 0.9 }],
+                    },
+                    {
+                        name: 'guard',
+                        type: 'npc',
+                        actions: [{ command: 'talk to guard', label: 'Talk', confidence: 0.85 }],
+                    },
+                ],
+            };
+
+            llmService.callProviderForState = async () => mockResponse;
+
+            const result = await llmService.extractStructuredState(gameState);
+
+            expect(result.objects).toContain('brass key');
+            expect(result.npcs).toContain('guard');
+        });
+
+        test('extractStructuredState does NOT overwrite populated objects field with interactables', async () => {
+            const gameState = {
+                gameTitle: 'Test',
+                gameText: 'Some text',
+                lastCommands: [],
+            };
+
+            const mockResponse = {
+                location: 'Room',
+                inventory: [],
+                objects: ['iron sword', 'shield'], // already populated
+                npcs: [],
+                exits: [],
+                verbs: [],
+                room_description: '',
+                quests: [],
+                suggestedActions: [],
+                npcProfiles: {},
+                mapData: { roomName: 'Room', exits: [] },
+                interactables: [
+                    {
+                        name: 'brass key',
+                        type: 'object',
+                        actions: [{ command: 'take brass key', label: 'Take', confidence: 0.9 }],
+                    },
+                ],
+            };
+
+            llmService.callProviderForState = async () => mockResponse;
+
+            const result = await llmService.extractStructuredState(gameState);
+
+            // Objects field should be unchanged
+            expect(result.objects).toEqual(['iron sword', 'shield']);
+        });
+
+        test('extractStructuredState derives exits from interactables when exits field is empty', async () => {
+            const gameState = {
+                gameTitle: 'Test',
+                gameText: 'Some text',
+                lastCommands: [],
+            };
+
+            const mockResponse = {
+                location: 'Room',
+                inventory: [],
+                objects: [],
+                npcs: [],
+                exits: [], // empty — should be populated from interactables
+                verbs: [],
+                room_description: '',
+                quests: [],
+                suggestedActions: [],
+                npcProfiles: {},
+                mapData: { roomName: 'Room', exits: [] },
+                interactables: [
+                    {
+                        name: 'north',
+                        type: 'exit',
+                        actions: [{ command: 'go north', label: 'Go north', confidence: 0.98 }],
+                    },
+                ],
+            };
+
+            llmService.callProviderForState = async () => mockResponse;
+
+            const result = await llmService.extractStructuredState(gameState);
+
+            expect(result.exits.length).toBe(1);
+            expect(result.exits[0].direction).toBe('north');
+        });
+
+        test('extractStructuredState returns empty interactables in default empty structure', async () => {
+            const gameState = {
+                gameTitle: 'Test',
+                gameText: 'Some text',
+                lastCommands: [],
+            };
+
+            llmService.callProviderForState = async () => null;
+
+            const result = await llmService.extractStructuredState(gameState);
+
+            expect(Array.isArray(result.interactables)).toBe(true);
+            expect(result.interactables.length).toBe(0);
+        });
+    });
+
     describe('Structured State Extraction', () => {
         test('should create default mapData if missing from provider response', async () => {
             const gameState = {
