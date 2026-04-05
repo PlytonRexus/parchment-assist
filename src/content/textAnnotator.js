@@ -4,16 +4,21 @@ class TextAnnotator {
         this._outputArea = null;
         this._popup = null;
         this._hideTimer = null;
+        this._focusedSpan = null;
 
         // Bind handlers so removeEventListener can match by reference
         this._onSpanMouseover = this._onSpanMouseover.bind(this);
         this._onSpanMouseout = this._onSpanMouseout.bind(this);
+        this._onSpanClick = this._onSpanClick.bind(this);
+        this._onSpanKeydown = this._onSpanKeydown.bind(this);
     }
 
     setupHoverListeners(outputArea) {
         this._outputArea = outputArea;
         outputArea.addEventListener('mouseover', this._onSpanMouseover);
         outputArea.addEventListener('mouseout', this._onSpanMouseout);
+        outputArea.addEventListener('click', this._onSpanClick);
+        outputArea.addEventListener('keydown', this._onSpanKeydown);
     }
 
     annotate(interactables) {
@@ -71,7 +76,8 @@ class TextAnnotator {
     _processTextNode(textNode, sortedInteractables) {
         const text = textNode.textContent;
 
-        // Build consumed ranges: [start, end, interactable]
+        // Build consumed ranges: [start, end, interactable] using exact word-boundary matching.
+        // Interactables are pre-sorted longest-first so "rusty key" matches before "key".
         const consumed = [];
 
         for (const item of sortedInteractables) {
@@ -81,7 +87,6 @@ class TextAnnotator {
             while ((match = regex.exec(text)) !== null) {
                 const start = match.index;
                 const end = start + match[0].length;
-                // Skip if overlaps any already-consumed range
                 const overlaps = consumed.some(([cs, ce]) => start < ce && end > cs);
                 if (!overlaps) {
                     consumed.push([start, end, item]);
@@ -105,11 +110,14 @@ class TextAnnotator {
             }
 
             const span = document.createElement('span');
-            span.className = 'pa-interactive';
+            const actions = item.actions || [];
+            const isSingle = actions.length === 1;
+            span.className = isSingle ? 'pa-interactive pa-interactive--single' : 'pa-interactive';
             span.textContent = text.slice(start, end);
             span.dataset.name = item.name;
             span.dataset.type = item.type || '';
-            span.dataset.actions = JSON.stringify(item.actions || []);
+            span.dataset.actions = JSON.stringify(actions);
+            span.setAttribute('tabindex', '0');
             fragment.appendChild(span);
 
             lastIndex = end;
@@ -181,6 +189,27 @@ class TextAnnotator {
             this._hideTimer = setTimeout(() => this._hidePopup(), 150);
         });
 
+        // Keyboard nav inside popup
+        popup.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                const restore = this._focusedSpan;
+                this._hidePopup();
+                if (restore) {
+                    restore.focus();
+                }
+            } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+                e.preventDefault();
+                const btns = Array.from(popup.querySelectorAll('.pa-action-popup-btn'));
+                const current = btns.indexOf(document.activeElement);
+                const next =
+                    e.key === 'ArrowDown'
+                        ? (current + 1) % btns.length
+                        : (current - 1 + btns.length) % btns.length;
+                btns[next]?.focus();
+            }
+        });
+
         for (const action of actions) {
             const btn = document.createElement('button');
             btn.className = 'pa-action-popup-btn';
@@ -198,13 +227,115 @@ class TextAnnotator {
         this._positionPopup(anchorSpan);
     }
 
+    _onSpanClick(e) {
+        const span = e.target.closest('.pa-interactive');
+        if (!span) {
+            return;
+        }
+        let actions = [];
+        try {
+            actions = JSON.parse(span.dataset.actions || '[]');
+        } catch {
+            actions = [];
+        }
+        if (actions.length === 1) {
+            // Single action — execute immediately on click
+            this.onChoiceSubmit(actions[0].command);
+            this._hidePopup();
+        }
+        // Multi-action: popup is shown via mouseover; click on span does nothing extra
+    }
+
+    _onSpanKeydown(e) {
+        // Handle keyboard interactions on .pa-interactive spans
+        const span = e.target.closest('.pa-interactive');
+
+        // Escape: close popup and restore focus to focused span
+        if (e.key === 'Escape') {
+            if (this._popup) {
+                e.preventDefault();
+                const restore = this._focusedSpan;
+                this._hidePopup();
+                if (restore) {
+                    restore.focus();
+                }
+            }
+            return;
+        }
+
+        if (!span) {
+            // Keyboard nav inside popup
+            if (this._popup && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+                e.preventDefault();
+                const btns = Array.from(this._popup.querySelectorAll('.pa-action-popup-btn'));
+                if (btns.length === 0) {
+                    return;
+                }
+                const current = btns.indexOf(document.activeElement);
+                const next =
+                    e.key === 'ArrowDown'
+                        ? (current + 1) % btns.length
+                        : (current - 1 + btns.length) % btns.length;
+                btns[next].focus();
+            }
+            return;
+        }
+
+        if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            this._focusedSpan = span;
+            let actions = [];
+            try {
+                actions = JSON.parse(span.dataset.actions || '[]');
+            } catch {
+                actions = [];
+            }
+            if (actions.length === 1) {
+                this.onChoiceSubmit(actions[0].command);
+                this._hidePopup();
+            } else {
+                this._showPopup(span, actions);
+                // Move focus to first popup button
+                requestAnimationFrame(() => {
+                    const first = this._popup?.querySelector('.pa-action-popup-btn');
+                    if (first) {
+                        first.focus();
+                    }
+                });
+            }
+        }
+    }
+
     _positionPopup(anchorSpan) {
         const rect = anchorSpan.getBoundingClientRect();
         const scrollY = window.scrollY || window.pageYOffset || 0;
         const scrollX = window.scrollX || window.pageXOffset || 0;
+        const vw = window.innerWidth || document.documentElement.clientWidth;
+        const vh = window.innerHeight || document.documentElement.clientHeight;
+
         this._popup.style.position = 'absolute';
-        this._popup.style.top = `${rect.bottom + scrollY + 4}px`;
-        this._popup.style.left = `${rect.left + scrollX}px`;
+
+        // Initial position: below the span
+        let top = rect.bottom + scrollY + 4;
+        let left = rect.left + scrollX;
+
+        // Apply initial position so we can measure popup dimensions
+        this._popup.style.top = `${top}px`;
+        this._popup.style.left = `${left}px`;
+
+        const popupRect = this._popup.getBoundingClientRect();
+
+        // If popup clips below viewport, position above the span
+        if (rect.bottom + popupRect.height + 8 > vh) {
+            top = rect.top + scrollY - popupRect.height - 4;
+            this._popup.style.top = `${top}px`;
+        }
+
+        // If popup clips right edge of viewport, shift left
+        if (left + popupRect.width > vw + scrollX) {
+            left = Math.max(scrollX, vw + scrollX - popupRect.width - 8);
+            this._popup.style.left = `${left}px`;
+        }
     }
 
     _hidePopup() {
@@ -220,10 +351,13 @@ class TextAnnotator {
         if (this._outputArea) {
             this._outputArea.removeEventListener('mouseover', this._onSpanMouseover);
             this._outputArea.removeEventListener('mouseout', this._onSpanMouseout);
+            this._outputArea.removeEventListener('click', this._onSpanClick);
+            this._outputArea.removeEventListener('keydown', this._onSpanKeydown);
         }
         this._clearAnnotations();
         this._hidePopup();
         this._outputArea = null;
+        this._focusedSpan = null;
     }
 }
 

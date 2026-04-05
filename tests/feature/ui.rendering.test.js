@@ -306,32 +306,6 @@ describe('UI Rendering', () => {
             expect(profileHTML).toContain('A wizard');
             expect(profileHTML).toContain('A hobbit');
         });
-
-        test('should render suggested actions', () => {
-            const state = {
-                location: 'Room',
-                inventory: [],
-                objects: [],
-                npcs: [],
-                exits: [],
-                verbs: [],
-                quests: [],
-                suggestedActions: ['examine key', 'talk to guard', 'open door'],
-                npcProfiles: {},
-            };
-
-            uiManager.updateCommandPalette(state, 0);
-
-            const actionsContainer = document.querySelector('#palette-actions');
-            const actionItems = actionsContainer.querySelectorAll('.palette-item');
-
-            expect(actionItems.length).toBe(3);
-
-            const actionTexts = Array.from(actionItems).map((item) => item.textContent);
-            expect(actionTexts).toContain('examine key');
-            expect(actionTexts).toContain('talk to guard');
-            expect(actionTexts).toContain('open door');
-        });
     });
 
     describe('List Rendering', () => {

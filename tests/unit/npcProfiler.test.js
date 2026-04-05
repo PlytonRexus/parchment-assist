@@ -74,6 +74,39 @@ describe('NpcProfiler', () => {
     it('should return undefined for unknown NPC', () => {
         expect(npcProfiler.getProfile('Nobody')).toBeUndefined();
     });
+
+    it('_deepMerge deduplicates case variants (first form kept)', () => {
+        npcProfiler.updateProfiles({ Guard: { dialogue: ['Hello'] } });
+        npcProfiler.updateProfiles({ Guard: { dialogue: ['hello'] } });
+        expect(npcProfiler.getProfile('Guard').dialogue).toEqual(['Hello']);
+    });
+
+    it('_deepMerge deduplicates whitespace variants', () => {
+        npcProfiler.updateProfiles({ Guard: { dialogue: ['Hi!'] } });
+        npcProfiler.updateProfiles({ Guard: { dialogue: [' Hi! '] } });
+        expect(npcProfiler.getProfile('Guard').dialogue).toEqual(['Hi!']);
+    });
+
+    it('_deepMerge keeps genuinely different strings', () => {
+        npcProfiler.updateProfiles({ Guard: { dialogue: ['Hello'] } });
+        npcProfiler.updateProfiles({ Guard: { dialogue: ['Goodbye'] } });
+        expect(npcProfiler.getProfile('Guard').dialogue).toEqual(['Hello', 'Goodbye']);
+    });
+});
+
+describe('NpcProfiler.dedupStrings', () => {
+    it('returns empty array for empty input', () => {
+        expect(NpcProfiler.dedupStrings([])).toEqual([]);
+    });
+
+    it('deduplicates case variants keeping first occurrence', () => {
+        expect(NpcProfiler.dedupStrings(['A', 'a', 'B'])).toEqual(['A', 'B']);
+    });
+
+    it('keeps non-string items using JSON comparison', () => {
+        const obj = { x: 1 };
+        expect(NpcProfiler.dedupStrings([obj, { x: 1 }, 'hello', 'Hello'])).toEqual([obj, 'hello']);
+    });
 });
 
 describe('showNpcProfile', () => {

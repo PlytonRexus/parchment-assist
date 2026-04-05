@@ -2,6 +2,8 @@
 
 class PopupManager {
     constructor() {
+        this._currentGameTitle = null;
+        this._currentTabId = null;
         this.init();
     }
 
@@ -25,9 +27,67 @@ class PopupManager {
                 tabElement.textContent = '❌ Not IF';
                 tabElement.style.color = '#e74c3c';
             }
+            await this._refreshEnableButton(tab);
         } catch (error) {
             console.error('Failed to check active tab:', error);
             document.getElementById('activeTab').textContent = 'Error';
+        }
+    }
+
+    async _refreshEnableButton(tab) {
+        const btn = document.getElementById('enablePage');
+        if (!btn || !tab || !tab.url) {
+            return;
+        }
+        try {
+            const origin = new URL(tab.url).origin;
+            const stored = await chrome.storage.local.get(['enabledOrigins']);
+            const enabledOrigins = stored.enabledOrigins || [];
+            if (enabledOrigins.includes(origin)) {
+                btn.textContent = 'Enabled ✓';
+                btn.classList.add('enabled');
+            } else {
+                btn.textContent = '▶ Enable Here';
+                btn.classList.remove('enabled');
+            }
+        } catch (_error) {
+            btn.textContent = '▶ Enable Here';
+        }
+    }
+
+    async enableOnThisPage(tab) {
+        const btn = document.getElementById('enablePage');
+        if (!tab || !tab.url) {
+            return;
+        }
+        try {
+            await chrome.scripting.executeScript({
+                target: { tabId: tab.id },
+                func: () => {
+                    window.__parchmentAssistManualEnable = true;
+                },
+            });
+            await chrome.scripting.executeScript({
+                target: { tabId: tab.id },
+                files: ['src/content/content-loader.js'],
+            });
+            await chrome.scripting.insertCSS({
+                target: { tabId: tab.id },
+                files: ['src/ui/ui.css'],
+            });
+            const origin = new URL(tab.url).origin;
+            const stored = await chrome.storage.local.get(['enabledOrigins']);
+            const enabledOrigins = stored.enabledOrigins || [];
+            if (!enabledOrigins.includes(origin)) {
+                enabledOrigins.push(origin);
+            }
+            await chrome.storage.local.set({ enabledOrigins });
+            if (btn) {
+                btn.textContent = 'Enabled ✓';
+                btn.classList.add('enabled');
+            }
+        } catch (error) {
+            console.error('Failed to enable on this page:', error);
         }
     }
 
@@ -119,6 +179,18 @@ class PopupManager {
             console.log('Manual Suggest button clicked');
             await this.manualSuggest();
         });
+
+        document.getElementById('enablePage').addEventListener('click', async () => {
+            const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+            await this.enableOnThisPage(tab);
+        });
+
+        const saveBtn = document.getElementById('saveStateBtn');
+        if (saveBtn) {
+            saveBtn.addEventListener('click', async () => {
+                await this._saveCurrentState();
+            });
+        }
     }
 
     async manualSuggest() {
@@ -198,6 +270,12 @@ class PopupManager {
             }
             console.log('Received raw game state:', rawStateResponse.gameState);
 
+            this._currentGameTitle = rawStateResponse.gameState.gameTitle || null;
+            this._currentTabId = tab.id;
+            if (this._currentGameTitle) {
+                await this._renderSavesSection();
+            }
+
             // 2. Send to service worker for processing
             const suggestionsResponse = await chrome.runtime.sendMessage({
                 action: 'getSuggestions',
@@ -231,13 +309,155 @@ class PopupManager {
             document.getElementById('inventory').textContent = 'Error';
         }
     }
+
+    async _renderSavesSection() {
+        const section = document.getElementById('savesSection');
+        const list = document.getElementById('savesList');
+        if (!section || !list) {
+            return;
+        }
+
+        section.style.display = 'block';
+        list.innerHTML = '';
+
+        try {
+            const key = `saves_${this._currentGameTitle}`;
+            const result = await chrome.storage.local.get([key]);
+            const saves = result[key] || [];
+
+            // Render newest first
+            for (let i = saves.length - 1; i >= 0; i--) {
+                const save = saves[i];
+                const item = document.createElement('div');
+                item.className = 'save-item';
+
+                const name = document.createElement('span');
+                name.className = 'save-name';
+                name.textContent = save.name;
+
+                const actions = document.createElement('span');
+
+                const restoreBtn = document.createElement('button');
+                restoreBtn.className = 'save-action-btn';
+                restoreBtn.textContent = '\u21a9';
+                restoreBtn.addEventListener('click', async () => {
+                    await this._restoreSave(save);
+                });
+
+                const deleteBtn = document.createElement('button');
+                deleteBtn.className = 'save-action-btn';
+                deleteBtn.textContent = '\u2717';
+                deleteBtn.addEventListener('click', async () => {
+                    await this._deleteSave(save.id);
+                });
+
+                actions.appendChild(restoreBtn);
+                actions.appendChild(deleteBtn);
+                item.appendChild(name);
+                item.appendChild(actions);
+                list.appendChild(item);
+            }
+        } catch (_error) {
+            // Storage unavailable
+        }
+    }
+
+    async _saveCurrentState() {
+        if (!this._currentGameTitle || !this._currentTabId) {
+            return;
+        }
+
+        try {
+            const snapshotResponse = await new Promise((resolve, reject) => {
+                chrome.tabs.sendMessage(
+                    this._currentTabId,
+                    { action: 'getStateSnapshot' },
+                    (response) => {
+                        if (chrome.runtime.lastError) {
+                            return reject(chrome.runtime.lastError);
+                        }
+                        resolve(response);
+                    }
+                );
+            });
+
+            if (!snapshotResponse || !snapshotResponse.success) {
+                return;
+            }
+
+            const newSave = {
+                id: Date.now().toString(),
+                name: new Date().toLocaleString(),
+                snapshot: snapshotResponse.snapshot,
+            };
+
+            const key = `saves_${this._currentGameTitle}`;
+            const result = await chrome.storage.local.get([key]);
+            const saves = result[key] || [];
+            saves.push(newSave);
+
+            // Keep max 5 saves — remove oldest
+            if (saves.length > 5) {
+                saves.splice(0, saves.length - 5);
+            }
+
+            await chrome.storage.local.set({ [key]: saves });
+            await this._renderSavesSection();
+        } catch (_error) {
+            // Storage or messaging error
+        }
+    }
+
+    async _restoreSave(save) {
+        if (!this._currentTabId) {
+            return;
+        }
+
+        try {
+            await new Promise((resolve, reject) => {
+                chrome.tabs.sendMessage(
+                    this._currentTabId,
+                    { action: 'restoreStateSnapshot', snapshot: save.snapshot },
+                    (response) => {
+                        if (chrome.runtime.lastError) {
+                            return reject(chrome.runtime.lastError);
+                        }
+                        resolve(response);
+                    }
+                );
+            });
+        } catch (_error) {
+            // Messaging error
+        }
+    }
+
+    async _deleteSave(saveId) {
+        if (!this._currentGameTitle) {
+            return;
+        }
+
+        try {
+            const key = `saves_${this._currentGameTitle}`;
+            const result = await chrome.storage.local.get([key]);
+            const saves = result[key] || [];
+            const filtered = saves.filter((s) => s.id !== saveId);
+            await chrome.storage.local.set({ [key]: filtered });
+            await this._renderSavesSection();
+        } catch (_error) {
+            // Storage error
+        }
+    }
 }
 
-// Initialize when DOM is ready
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => {
+export { PopupManager };
+
+// Initialize when DOM is ready (guard prevents auto-init in test environments)
+if (document.getElementById('openOptions') !== null || document.readyState === 'loading') {
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', () => {
+            new PopupManager();
+        });
+    } else {
         new PopupManager();
-    });
-} else {
-    new PopupManager();
+    }
 }

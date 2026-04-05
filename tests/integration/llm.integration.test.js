@@ -3,7 +3,8 @@
  * Tests the service worker's LLM integration without making actual API calls
  */
 
-import { LLMService } from '../../src/background/service-worker.js';
+import { jest } from '@jest/globals';
+import { LLMService, RateLimiter } from '../../src/background/service-worker.js';
 
 describe('LLM Service Integration', () => {
     let llmService;
@@ -273,6 +274,55 @@ That's the analysis.`;
 
             // Cache should be limited to 50
             expect(llmService.cache.size).toBeLessThanOrEqual(50);
+        });
+    });
+
+    describe('Cache poisoning prevention', () => {
+        test('should NOT cache response when structuredState has empty location', async () => {
+            const gameState = {
+                gameTitle: 'Test Game',
+                gameText: 'Test text',
+                lastCommands: [],
+            };
+
+            // Provider returns null (failure), which _validateAndNormalizeState converts to empty state
+            llmService.callProviderForState = async () => null;
+
+            const result = await llmService.getSuggestions(gameState);
+
+            // Should still return the empty state response
+            expect(result.structuredState.location).toBe('');
+
+            // But it should NOT be cached
+            const cacheKey = llmService.generateCacheKey(gameState);
+            expect(llmService.cache.has(cacheKey)).toBe(false);
+        });
+
+        test('should cache response when structuredState has a valid location', async () => {
+            const gameState = {
+                gameTitle: 'Test Game',
+                gameText: 'Valid text',
+                lastCommands: [],
+            };
+
+            llmService.callProviderForState = async () => ({
+                location: 'Kitchen',
+                inventory: [],
+                objects: [],
+                npcs: [],
+                exits: [],
+                verbs: [],
+                room_description: '',
+                quests: [],
+                suggestedActions: [],
+                npcProfiles: {},
+                mapData: { roomName: 'Kitchen', exits: [] },
+            });
+
+            await llmService.getSuggestions(gameState);
+
+            const cacheKey = llmService.generateCacheKey(gameState);
+            expect(llmService.cache.has(cacheKey)).toBe(true);
         });
     });
 
@@ -709,6 +759,177 @@ That's the analysis.`;
             expect(result.mapData.exits).toEqual([{ direction: 'north', room: 'Hall' }]);
         });
 
+        test('should preserve extended mapData rooms with status and description', async () => {
+            const gameState = {
+                gameTitle: 'Test Game',
+                gameText: 'You are in a room.',
+                lastCommands: [],
+            };
+
+            const mockResponse = {
+                location: 'Hall',
+                inventory: [],
+                objects: [],
+                npcs: [],
+                exits: [{ direction: 'north', room: 'Vault' }],
+                verbs: [],
+                room_description: '',
+                quests: [],
+                suggestedActions: [],
+                npcProfiles: {},
+                mapData: {
+                    roomName: 'Hall',
+                    exits: [{ direction: 'north', room: 'Vault' }],
+                    rooms: {
+                        Hall: {
+                            items: ['lantern'],
+                            description: 'A low stone hall.',
+                            status: 'visited',
+                        },
+                        'Locked Vault': {
+                            items: [],
+                            description: 'A heavy iron door blocks access.',
+                            status: 'unvisited',
+                        },
+                    },
+                    connections: [
+                        {
+                            from: 'Hall',
+                            to: 'Locked Vault',
+                            label: 'north',
+                            accessible: false,
+                            confirmed: true,
+                        },
+                    ],
+                },
+                interactables: [],
+            };
+
+            llmService.callProviderForState = async () => mockResponse;
+
+            const result = await llmService.extractStructuredState(gameState);
+
+            expect(result.mapData.rooms.Hall.status).toBe('visited');
+            expect(result.mapData.rooms.Hall.description).toBe('A low stone hall.');
+            expect(result.mapData.rooms['Locked Vault'].status).toBe('unvisited');
+            expect(result.mapData.connections[0].accessible).toBe(false);
+            expect(result.mapData.connections[0].confirmed).toBe(true);
+        });
+
+        test('should default missing rooms/connections in mapData', async () => {
+            const gameState = {
+                gameTitle: 'Test Game',
+                gameText: 'You are in a room.',
+                lastCommands: [],
+            };
+
+            const mockResponse = {
+                location: 'Hall',
+                inventory: [],
+                objects: [],
+                npcs: [],
+                exits: [],
+                verbs: [],
+                room_description: '',
+                quests: [],
+                suggestedActions: [],
+                npcProfiles: {},
+                mapData: {
+                    roomName: 'Hall',
+                    exits: [],
+                    // rooms and connections missing
+                },
+                interactables: [],
+            };
+
+            llmService.callProviderForState = async () => mockResponse;
+
+            const result = await llmService.extractStructuredState(gameState);
+
+            expect(result.mapData.rooms).toEqual({});
+            expect(result.mapData.connections).toEqual([]);
+        });
+
+        test('should default room status to visited and sanitize connection fields', async () => {
+            const gameState = {
+                gameTitle: 'Test Game',
+                gameText: 'You are in a room.',
+                lastCommands: [],
+            };
+
+            const mockResponse = {
+                location: 'Hall',
+                inventory: [],
+                objects: [],
+                npcs: [],
+                exits: [],
+                verbs: [],
+                room_description: '',
+                quests: [],
+                suggestedActions: [],
+                npcProfiles: {},
+                mapData: {
+                    roomName: 'Hall',
+                    exits: [],
+                    rooms: {
+                        Hall: { items: [], description: 'A hall.' },
+                    },
+                    connections: [{ from: 'Hall', to: 'Garden', label: 'north' }],
+                },
+                interactables: [],
+            };
+
+            llmService.callProviderForState = async () => mockResponse;
+
+            const result = await llmService.extractStructuredState(gameState);
+
+            // status defaults to visited
+            expect(result.mapData.rooms.Hall.status).toBe('visited');
+            // accessible and confirmed default to true
+            expect(result.mapData.connections[0].accessible).toBe(true);
+            expect(result.mapData.connections[0].confirmed).toBe(true);
+        });
+
+        test('should filter out malformed connections', async () => {
+            const gameState = {
+                gameTitle: 'Test Game',
+                gameText: 'You are in a room.',
+                lastCommands: [],
+            };
+
+            const mockResponse = {
+                location: 'Hall',
+                inventory: [],
+                objects: [],
+                npcs: [],
+                exits: [],
+                verbs: [],
+                room_description: '',
+                quests: [],
+                suggestedActions: [],
+                npcProfiles: {},
+                mapData: {
+                    roomName: 'Hall',
+                    exits: [],
+                    rooms: {},
+                    connections: [
+                        { from: 'Hall', to: 'Garden', label: 'north' },
+                        { from: 123, to: 'Bad' },
+                        null,
+                        'string',
+                    ],
+                },
+                interactables: [],
+            };
+
+            llmService.callProviderForState = async () => mockResponse;
+
+            const result = await llmService.extractStructuredState(gameState);
+
+            expect(result.mapData.connections).toHaveLength(1);
+            expect(result.mapData.connections[0].from).toBe('Hall');
+        });
+
         test('should return empty structure if provider returns null', async () => {
             const gameState = {
                 gameTitle: 'Test Game',
@@ -1073,6 +1294,256 @@ That's the analysis.`;
 
             // confidence clamped to 1
             expect(result.interactables[0].actions[0].confidence).toBe(1);
+        });
+    });
+
+    describe('RateLimiter', () => {
+        it('consume() returns true when tokens are available', () => {
+            const limiter = new RateLimiter(10, 10);
+            expect(limiter.consume()).toBe(true);
+        });
+
+        it('consume() returns false when all tokens are exhausted', () => {
+            const limiter = new RateLimiter(2, 10);
+            limiter.consume(); // token 1
+            limiter.consume(); // token 2
+            expect(limiter.consume()).toBe(false);
+        });
+
+        it('tokens refill over time', () => {
+            const limiter = new RateLimiter(10, 10);
+            // exhaust all tokens
+            for (let i = 0; i < 10; i++) {
+                limiter.consume();
+            }
+            expect(limiter.consume()).toBe(false);
+
+            // advance time by 60 seconds → full refill
+            const original = Date.now;
+            Date.now = () => original() + 60000;
+            expect(limiter.consume()).toBe(true);
+            Date.now = original;
+        });
+
+        it('tryOllama throws when Ollama rate limiter is exhausted', async () => {
+            llmService._ollamaRateLimiter.consume = () => false;
+            await expect(llmService.tryOllama('prompt', (x) => x)).rejects.toThrow(
+                'Rate limited: Ollama'
+            );
+        });
+
+        it('tryGemini throws when Gemini rate limiter is exhausted', async () => {
+            llmService._geminiRateLimiter.consume = () => false;
+            await expect(llmService.tryGemini('prompt', (x) => x)).rejects.toThrow(
+                'Rate limited: Gemini'
+            );
+        });
+    });
+
+    describe('Multi-key rotation', () => {
+        let originalFetch;
+
+        beforeEach(() => {
+            originalFetch = globalThis.fetch;
+        });
+
+        afterEach(() => {
+            globalThis.fetch = originalFetch;
+        });
+
+        it('on 429, _geminiKeyIndex advances to next key', () => {
+            llmService.settings.geminiKeys = ['key1', 'key2'];
+            llmService._geminiKeyIndex = 0;
+            llmService._geminiModelIndex = 0;
+
+            llmService._advanceGeminiOnRateLimit();
+
+            expect(llmService._geminiKeyIndex).toBe(1);
+            // Model should not change yet — still keys to try
+            expect(llmService._geminiModelIndex).toBe(0);
+        });
+
+        it('rotates through all keys before advancing model', () => {
+            llmService.settings.geminiKeys = ['key1', 'key2', 'key3'];
+            llmService._geminiKeyIndex = 0;
+            llmService._geminiModelIndex = 0;
+
+            // First advance: key 0 → key 1
+            llmService._advanceGeminiOnRateLimit();
+            expect(llmService._geminiKeyIndex).toBe(1);
+            expect(llmService._geminiModelIndex).toBe(0);
+
+            // Second advance: key 1 → key 2
+            llmService._advanceGeminiOnRateLimit();
+            expect(llmService._geminiKeyIndex).toBe(2);
+            expect(llmService._geminiModelIndex).toBe(0);
+
+            // Third advance: all keys exhausted for model 0 → model 1, key reset to 0
+            llmService._advanceGeminiOnRateLimit();
+            expect(llmService._geminiModelIndex).toBe(1);
+            expect(llmService._geminiKeyIndex).toBe(0);
+        });
+
+        it('after all keys for a model fail, model index advances', () => {
+            llmService.settings.geminiKeys = ['key1', 'key2'];
+            llmService._geminiKeyIndex = 0;
+            llmService._geminiModelIndex = 0;
+
+            // Exhaust all keys for model 0
+            llmService._advanceGeminiOnRateLimit(); // key1 → key2
+            llmService._advanceGeminiOnRateLimit(); // key2 exhausted → model 1
+
+            expect(llmService._geminiModelIndex).toBe(1);
+            expect(llmService._geminiKeyIndex).toBe(0);
+        });
+
+        it('_getGeminiKey returns the correct key based on _geminiKeyIndex', () => {
+            llmService.settings.geminiKeys = ['alpha', 'bravo', 'charlie'];
+
+            llmService._geminiKeyIndex = 0;
+            expect(llmService._getGeminiKey()).toBe('alpha');
+
+            llmService._geminiKeyIndex = 1;
+            expect(llmService._getGeminiKey()).toBe('bravo');
+
+            llmService._geminiKeyIndex = 2;
+            expect(llmService._getGeminiKey()).toBe('charlie');
+        });
+
+        it('tryGemini rotates keys on 429 and retries with next key', async () => {
+            llmService.settings.geminiKeys = ['key1', 'key2'];
+            llmService.settings.geminiKey = 'key1';
+            llmService.settings.activeProviders = ['gemini'];
+            llmService._geminiKeyIndex = 0;
+            llmService._geminiModelIndex = 0;
+
+            const keysUsed = [];
+            globalThis.fetch = async (_url, options) => {
+                keysUsed.push(options.headers['x-goog-api-key']);
+                if (keysUsed.length === 1) {
+                    // First call returns 429
+                    return { ok: false, status: 429 };
+                }
+                // Second call succeeds
+                return {
+                    ok: true,
+                    json: async () => ({
+                        candidates: [
+                            {
+                                content: {
+                                    parts: [{ text: '{"location":"Room"}' }],
+                                },
+                            },
+                        ],
+                    }),
+                };
+            };
+
+            const result = await llmService.tryGemini(
+                'prompt',
+                llmService.parseStateResponse.bind(llmService)
+            );
+
+            expect(keysUsed[0]).toBe('key1');
+            expect(keysUsed[1]).toBe('key2');
+            expect(result.location).toBe('Room');
+        });
+
+        it('all keys + all models exhausted triggers backoff', () => {
+            llmService.settings.geminiKeys = ['key1', 'key2'];
+            llmService._geminiKeyIndex = 0;
+            llmService._geminiModelIndex = 0;
+
+            // Exhaust every key for every model
+            const totalModels = LLMService.GEMINI_MODELS.length;
+            for (let m = 0; m < totalModels; m++) {
+                // 2 keys per model, plus one extra advance to move to the next model
+                for (let k = 0; k < 2; k++) {
+                    llmService._advanceGeminiOnRateLimit();
+                }
+            }
+
+            // After exhausting all models and keys, backoff should be set
+            expect(llmService._geminiBackoffUntil).toBeGreaterThan(Date.now());
+        });
+    });
+
+    describe('Scoped prompt and heuristic hints', () => {
+        let llmService;
+
+        beforeEach(() => {
+            llmService = new LLMService();
+        });
+
+        test('_buildStatePrompt uses scopedText when provided', () => {
+            const gameState = {
+                gameTitle: 'Test Game',
+                gameText: 'Full transcript with lots of text from many rooms...',
+                lastCommands: ['go east'],
+            };
+            const prompt = llmService._buildStatePrompt(gameState, {
+                scopedText: 'Kitchen\nYou see a lamp here.',
+            });
+            expect(prompt).toContain('Kitchen');
+            expect(prompt).toContain('lamp');
+            expect(prompt).toContain('Current Room Text');
+        });
+
+        test('_buildStatePrompt falls back to gameText when scopedText missing', () => {
+            const gameState = {
+                gameTitle: 'Test Game',
+                gameText: 'A fallback game transcript.',
+                lastCommands: [],
+            };
+            const prompt = llmService._buildStatePrompt(gameState, {});
+            expect(prompt).toContain('A fallback game transcript');
+        });
+
+        test('_buildStatePrompt includes heuristic hints in prompt', () => {
+            const gameState = {
+                gameTitle: 'Test',
+                gameText: 'Some text',
+                lastCommands: [],
+            };
+            const prompt = llmService._buildStatePrompt(gameState, {
+                heuristicHints: ['lamp', 'door', 'window'],
+            });
+            expect(prompt).toContain('Candidate interactables');
+            expect(prompt).toContain('lamp');
+            expect(prompt).toContain('door');
+            expect(prompt).toContain('window');
+        });
+
+        test('_buildStatePrompt omits hints section when no hints', () => {
+            const gameState = {
+                gameTitle: 'Test',
+                gameText: 'Some text',
+                lastCommands: [],
+            };
+            const prompt = llmService._buildStatePrompt(gameState, {
+                heuristicHints: [],
+            });
+            expect(prompt).not.toContain('Candidate interactables');
+        });
+
+        test('generateCacheKey differs with different scopedText', () => {
+            const gameState = {
+                gameText: 'Same full text for both',
+                lastCommands: ['look'],
+            };
+            const key1 = llmService.generateCacheKey(gameState, 'Kitchen\nYou see a lamp.');
+            const key2 = llmService.generateCacheKey(gameState, 'Garden\nYou see a fountain.');
+            expect(key1).not.toBe(key2);
+        });
+
+        test('generateCacheKey falls back to gameText when no scopedText', () => {
+            const gameState = {
+                gameText: 'Some game text here.',
+                lastCommands: [],
+            };
+            const key1 = llmService.generateCacheKey(gameState);
+            const key2 = llmService.generateCacheKey(gameState, undefined);
+            expect(key1).toBe(key2);
         });
     });
 });

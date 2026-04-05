@@ -1,4 +1,5 @@
 import { HTMLCleaner } from '../helpers/htmlCleaner.js';
+import { detectAdapter } from './siteAdapters.js';
 
 class GameStateManager {
     constructor() {
@@ -13,11 +14,28 @@ class GameStateManager {
         this.lastGameText = '';
         this._mergingQuests = false;
         this.rejectedCommands = new Map(); // command (lowercase) → rejection count
+        this._siteAdapter = null;
+    }
+
+    _getAdapter() {
+        if (!this._siteAdapter) {
+            this._siteAdapter = detectAdapter(window.location.hostname);
+        }
+        return this._siteAdapter;
+    }
+
+    getAdapter() {
+        return this._getAdapter();
     }
 
     isParchmentPage() {
+        if (window.__parchmentAssistManualEnable) {
+            return true;
+        }
         return (
             window.location.hostname.includes('iplayif.com') ||
+            window.location.hostname.includes('textadventures.co.uk') ||
+            window.location.hostname.includes('ifcomp.org') ||
             document.querySelector('#parchment') ||
             document.querySelector('.parchment') ||
             (document.querySelector('input[type="text"]') &&
@@ -26,48 +44,11 @@ class GameStateManager {
     }
 
     findInputField() {
-        const selectors = [
-            'input[type="text"]',
-            '#input',
-            '.input',
-            '#cmdline',
-            '#command-line-input',
-            '.command-line',
-            'input[placeholder*="command"]',
-            'input[placeholder*="Command"]',
-            'input[name="command"]',
-            'textarea',
-        ];
-        for (const selector of selectors) {
-            const element = document.querySelector(selector);
-            if (element && element.offsetHeight > 0) {
-                return element;
-            }
-        }
-        return null;
+        return this._getAdapter().findInputField();
     }
 
     findOutputArea() {
-        const selectors = [
-            '#output',
-            '.output',
-            '#story',
-            '.story',
-            '#parchment',
-            '.parchment',
-            'pre',
-            '.text-buffer',
-            '#text-buffer',
-            '#gameport',
-            '.game-output',
-        ];
-        for (const selector of selectors) {
-            const element = document.querySelector(selector);
-            if (element && element.textContent.length > 10) {
-                return element;
-            }
-        }
-        return null;
+        return this._getAdapter().findOutputArea();
     }
 
     recordCommand(command) {
@@ -90,7 +71,7 @@ class GameStateManager {
         this.rejectedCommands.clear();
     }
 
-    filterByRejections(interactables, threshold = 2) {
+    filterByRejections(interactables, threshold = 1) {
         if (!interactables) {
             return [];
         }

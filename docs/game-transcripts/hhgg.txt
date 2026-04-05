@@ -1,0 +1,240 @@
+THE HITCHHIKER'S GUIDE TO THE GALAXY
+Infocom interactive fiction - a science fiction story
+Copyright (c) 1984 by Infocom, Inc. All rights reserved.
+Release 31 / Serial number 871119 / Interpreter 4 Version F
+
+You wake up. The room is spinning very gently round your head. Or at least it would be if you could see it which you can't.
+
+It is pitch black.
+
+Good lord, what did I do last night. I must have gotten drunk to much that it would be legendary among the gods... wait, was it last night or was it last year. I can’t remember. All I can remember is that parade once I got back to Earth, and then hitting on the President’s wife followed by hitting the President. Then there was something about witness protection and a new name and... well I guess I’ve been drunk for a very long time at this point haven’t I, I guess I better see where I am.
+
+>turn on light
+Good start to the day. Pity it's going to be the worst one of your life. The light is now on.
+
+Bedroom, in the bed
+The bedroom is a mess.
+It is a small bedroom with a faded carpet and old wallpaper. There is a washbasin, a chair with a tatty dressing gown slung over it, and a window with the curtains drawn. Near the exit leading south is a phone.
+There is a flathead screwdriver here. (outside the bed)
+There is a toothbrush here. (outside the bed)
+
+Well, that’s starting the day on a positive note.
+
+>get up
+Very difficult, but you manage it. The room is still spinning. It dips and sways a little.
+
+>take gown
+Luckily, this is large enough for you to get hold of. You notice something in the pocket.
+
+>put on gown
+You are now wearing your gown.
+
+>look in gown
+Opening your gown reveals a buffered analgesic, pocket fluff, and a thing your aunt gave you which you don't know what it is.
+
+A buffered analgesic? That seems like a fancy way of say Aspirin, but with this headache it couldn’t hurt, so down the hatch it goes.
+
+>take analgesic
+You swallow the tablet. After a few seconds the room begins to calm down and behave in an orderly manner. Your terrible headache goes.
+
+>take all
+flathead screwdriver: Taken.
+toothbrush: As you pick up the toothbrush a tree outside the window collapses. There is no causal relationship between these two events.
+telephone: You pick up the receiver. A moment later, the dialing tone is suddenly cut off. Glancing through the window you can't help but notice the large old oak tree of which you are particularly fond crashing down through the phone cable. Shouldn't you be taking more interest in events in the world around you? While you've got it...?
+
+>look out window
+As you part your curtains you see that it's a bright morning, the sun is shining, the birds are singing, the meadows are blooming, and a large yellow bulldozer is advancing on your home.
+
+You know it does seem to be a rather nice day at the moment, well other than that whole bulldozer thing. Too bad it seems to be heading this way, through my front lawn. I wonder why it’s doing that... wait a moment! What the hell?
+
+>out
+You rush down the stairs in panic.
+
+Front Porch
+This is the enclosed front porch of your home. Your front garden lies to the south, and you can reenter your home to the north.
+On the doormat is a pile of junk mail.
+
+>take mail
+You gather up the pile of mail.
+
+You never know, it might be something important.
+
+>s
+Front of House
+You can enter your home to the north. A path leads around it to the northeast and northwest, and a country lane is visible to the south. All that lies between your home and the huge yellow bulldozer bearing down on it is a few yards of mud.
+Mr. Prosser, from the local council, is standing on the other side of the bulldozer. He seems to be wearing a digital watch. He looks startled to see you emerge, and yells at you to get out of the way.
+
+The bulldozer rumbles slowly toward your home.
+
+>protest
+Prosser says, "I wouldn't stop the bulldozer even if you were lying in front of it!"
+
+The bulldozer rumbles slowly toward your home.
+
+>hit prosser
+He dodges, insisting that this is incorrect procedure.
+
+The bulldozer rumbles slowly toward your home.
+
+I don’t know, that seemed pretty correct to me.
+
+>stop bulldozer
+You lie down in the path of the advancing bulldozer. Prosser yells at you to for crissake move!!!
+
+>no!
+I don't know the word "no!".
+
+Well you should!
+
+>prosser, no
+"Please step aside as I need to be able to knock your house down."
+
+The bulldozer thunders toward you. The ground is shaking beneath you as you lie in the mud.
+
+I’m not going to move you know. I don’t care how little damage I would do to the bulldozer if rolled over me. I’m staying put here in the mud.
+
+>enjoy the mud
+It occurs to you that you've never deliberately lain in any mud before and that it's actually a pleasant sort of squishy sensation. You let the mud ooze between your toes. You may be here for some time, so you may as well make the most of it.
+
+The noise of the giant bulldozer is now so violently loud that you can't even hear Prosser yelling to warn you that you will be killed if you don't get the hell out of the way. You just see him gesticulating wildly.
+
+Well, at least it’s nice mud.
+
+>wait
+Time passes...
+
+With a terrible grinding of gears the bulldozer comes to an abrupt halt just in front of you. It shakes, shudders, and emits noxious substances all over your rose bed. Prosser is incoherent with rage.
+
+Moments later, your friend Ford Prefect arrives. He hardly seems to notice your predicament, but keeps glancing nervously at the sky. He says, "Hello, Arthur," takes a towel from his battered leather satchel, and offers it to you.
+
+Ford, hi, how are you?
+
+>look at ford
+You see nothing special about Ford Prefect.
+
+Ford glances uncomfortably at the sky. He offers you the towel again.
+
+Look, I’m kind of busy at the moment, and while it’s nice of you to offer me a towel to clean up the mud, I really don’t think this is the best time for it.
+
+>look at towel
+It's covered with little pink and blue flowers.
+
+Ford seems oblivious to your trouble, so you ask "Ford, what about my home?" He looks startled, then guilty. He starts to say something and stops. He starts to say something else and stops. Suddenly, he seems to see the bulldozer for the first time, stops starting to say things and starts.
+
+He seems to come to a momentous decision, says he has something of Earth-shattering importance to tell you, and stresses the importance of a quick drink at the Horse 'n Groom.
+
+Pointing toward Prosser, you exclaim, "But that man wants to knock my house down!" Ford goes off for a quiet word with Prosser. From where you're lying, you cannot hear what's happening, although they seem deeply engrossed in conversation.
+
+Fine, I’ll just stay here in the mud.
+
+>wait
+Time passes...
+
+Ford and Prosser stop talking and approach you. Ford says that Prosser has agreed to lie in your place so that the two of you can go off to the Pub. Reluctantly, Prosser steps forward and lies down in front of the bulldozer. You stand up.
+
+>okay....
+You sound rather positive.
+
+So, what do you want me to do now Ford?
+
+>wait
+Time passes...
+
+Ford, urging you to follow, hurries toward the country lane.
+
+>follow ford
+In a state of anxiety and confusion you follow Ford down the lane...
+
+Country Lane
+The road runs from your home, to the north, toward the village Pub, to the west.
+Ford Prefect is here.
+
+"Come along, Arthur," says Ford impatiently, and enters the Pub.
+
+>follow ford
+In a state of anxiety and confusion you follow Ford down the lane...
+
+Pub
+The Pub is pleasant and cheerful and full of pleasant and cheerful people who don't know they've got about twelve minutes to live and are therefore having a spot of lunch. Some music is playing on an old jukebox. The exit is east.
+Ford Prefect is here.
+There is a barman serving at the bar.
+Behind the bar is a shelf. It is full of the sort of items you find on shelves behind bars in pubs.
+
+Ford buys lots of beer and offers half to you. "Muscle relaxant..." he says, impenetrably.
+
+Really, aren’t you a bit fatalistic. And Ford, it’s not even lunch time, is the really the right moment to be getting drunk? I mean I like a good beer (though I think my favorite is a Welsh brand) but this hardly seems like the time. Well, it’s not like I have anything better to do.
+
+>drink beer
+It's very good beer, brewed by a small local company. You particularly like its flavour, which is why you woke up feeling so wretched this morning. You were at somebody's birthday party here in the Pub last night.
+
+You begin to relax and enjoy yourself, so when Ford mentions that he's from a small planet in the vicinity of Betelgeuse, not from Guildford as he usually claims, you take it in your stride, and say, "Oh yes, which part?"
+
+>drink beer
+It is really very pleasant stuff, with a very good dry, nutty flavour, some light froth on top, and a deep colour. It is at exactly room temperature. You reflect that the world cannot be all bad when there are such pleasures in it.
+
+Ford mentions that the world is going to end in about twelve minutes
+
+So I keep hearing. I don’t think you’re really right in the head Ford.
+
+>drink beer
+There is a distant crash which Ford explains is nothing to worry about, probably just your house being knocked down.
+
+What?! By god it is, what the hell are they doing, we had an agreement! Stop you vandals, you home wreckers, you half crazed Visigoths, stop!
+
+>out
+Country Lane
+You see the huge bulldozer heaving itself among the cloud of brick dust which is all that remains of your home. As you start up the lane, a small dog runs up to you, yapping.
+
+Ford hurries after you.
+
+>look at dog
+The mongrel looks hungry.
+
+>n
+You reach the site of what was your home. It is now a pile of rubble. Mr. Prosser looks sheepishly triumphant, a trick few people can do, as it requires a lot of technically complex deltoid muscle work.
+
+Front of House
+Mr. Prosser, from the local council, is standing on the other side of the bulldozer. He seems to be wearing a digital watch.
+
+Ford hurries after you.
+
+You pinstriped barbarians, I’ll sue the council for every penny it’s got! I’ll have you hung and drawn and quartered and whipped and boiled, and then I’ll chop you up into little bits until... until you’ve had enough! Then I’ll do it some more, and when I’ve finished I’ll take all the little bits and then I’ll jump on them! And I’ll carry on jumping on them until I get blisters, or I can think of something even more unpleasant to do.
+
+>prosser, what about my house
+Prosser explains the local planning regulations and says, by way of reassurance, that you will probably be rehoused within a couple of years.
+
+With a noise like a cross between Led Zeppelin's farewell concert and the eruption of Krakatoa, a huge fleet of Vogon Constructor ships flies overhead and announces that the Earth will be demolished to make way for a new hyperspace bypass in "two of your Earth minutes."
+
+>hit prosser
+You muck up all his fancy facial work. This is the last moment of satisfaction you will experience for some time.
+
+Well now, that felt very good! Now, what the hell is that?!
+
+The vast yellow ships thunder across the sky, spreading waves of terror and panic in their wake. The voice of the Vogon Captain slams across the country, insisting that the planning charts and demolition orders have been available at the local planning office in Alpha Centauri for fifty years and it's too late to start making a fuss about it now.
+
+Throughout the noise, Ford is shouting at you. He removes a small black device from his satchel, but accidentally drops it at your feet.
+
+What in the world is that?
+
+>pick up device
+Taken.
+
+Fierce gales whip across the land, and thunder bangs continuously through the air in the wake of the giant ships. Ford fights to reach you, but the wind is too fierce. Further announcements from the Vogon Captain make it clear that demolition will begin in just a few seconds.
+
+Through the blinding rain, you see lights flickering on the small device.
+
+>look at device
+The electronic Sub-Etha signaling device is shaped like a small fist with an extended thumb. Various lights along its "knuckles" are currently blinking wildly, indicating a spaceship in the vicinity. It has two small buttons, a red one labelled "Call Engineer" and a green one labelled "Hitchhike." It bears a small label which reads "Another fine product of the Sirius Cybernetics Corporation." Affixed to the Thumb is a lifetime guarantee.
+
+Well, I don’t think an engineer will be able to help me in this situation. So I’m going to try pressing the green button!
+
+>press green button
+Lights whirl sickeningly around your head, the ground arches away beneath your feet, and every atom of your being is scrambled, an experience you're probably going to have to get used to. You are in...
+
+Dark
+
+Well... I think that worked I guess.. I’m just going to stay here for the moment and try to catch my bearings.
+
+> inventory
+There's nothing you can taste, nothing you can see, nothing you can hear, nothing you can feel, nothing you can smell, you do not even know who you are.
+

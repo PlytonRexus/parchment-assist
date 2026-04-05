@@ -111,4 +111,29 @@ describe('CommandExecutor', () => {
             expect(() => exec.submitCommand('look')).not.toThrow();
         });
     });
+
+    describe('submitAction adapter delegation', () => {
+        test('calls submitAction instead of KeyboardEvent when provided', () => {
+            const submitAction = jest.fn();
+            const exec = new CommandExecutor({ findInputField, onError, submitAction });
+            exec.submitCommand('go north');
+            expect(submitAction).toHaveBeenCalledWith('go north', inputField);
+        });
+
+        test('does not dispatch KeyboardEvent when submitAction is provided', () => {
+            const submitAction = jest.fn();
+            const exec = new CommandExecutor({ findInputField, onError, submitAction });
+            const events = [];
+            inputField.addEventListener('keydown', (e) => events.push(e.key));
+            exec.submitCommand('look');
+            expect(events).toHaveLength(0);
+        });
+
+        test('falls back to KeyboardEvent when submitAction is not provided', () => {
+            const events = [];
+            inputField.addEventListener('keydown', (e) => events.push(e.key));
+            executor.submitCommand('look');
+            expect(events).toContain('Enter');
+        });
+    });
 });

@@ -1,0 +1,365 @@
+Transcript of Michael S. Gentry's "Anchorhead", by David A. Wheeler
+
+{I wish I'd made a transcript while trying to solve Anchorhead, because
+there's a lot of interesting text in the game... but I didn't.
+So instead I started over, started a transcript, and used the
+walkthrough by Aeron Pax along with a lot of extra "examinations" and
+"look"s to get a sense of the place.  This way, you can at least enjoy
+some of the text of Anchorhead.  Note: In a few places the commands
+seem "miraculous" because they don't really search around to find out
+what to do, as you would in a real game.  If you want to experience
+the game, you should just go play it.}
+
+
+
+
+  A N C H O R H E A D
+
+ [Press 'R' to restore; any other key to begin]
+
+[ The oldest and strongest emotion of mankind
+  is fear, and the oldest and strongest kind
+  of fear is fear of the unknown.
+  
+  -- H.P. Lovecraft]
+
+
+November, 1997.
+
+
+You take a deep breath of salty air as the first raindrops begin to spatter
+the pavement, and the swollen, slate-colored clouds that blanket the sky
+mutter ominous portents amongst themselves over the little coastal town of
+Anchorhead.
+
+Squinting up into the glowering storm, you wonder how everything managed to
+happen so fast. The strange phone call over a month ago, from a lawyer
+claiming to represent the estate of some distant branch of Michael's family,
+was bewildering enough in itself... but then the sudden whirlwind of
+planning and decisions, legal details and travel arrangements, the packing
+up and shipping away of your entire home, your entire life...
+
+Now suddenly here you are, after driving for the past two days straight,
+over a thousand miles away from the familiar warmth of Texas, getting
+ready to move into the ancestral mansion of a clan of relatives so far
+removed that not even Michael has ever heard of them. And you've only
+been married since June and none of this was any of your idea in the first
+place, and already it's starting to rain.
+
+These days, you often find yourself feeling confused and uprooted.
+
+You shake yourself and force the melancholy thoughts from your head,
+trying to focus on the errand at hand. You're to meet with the real estate
+agent and pick up the keys to your new house while Michael runs across town
+to take care of some paperwork at the university. He'll be back to pick you up
+in a few minutes, and then the two of you can begin the long, precarious
+process of settling in.
+
+A sullen belch emanates from the clouds, and the rain starts coming down
+harder -- fat, cold drops smacking loudly against the cobblestones.
+Shouldn't it be snowing in New England at this time of year? With a sigh,
+you open your umbrella.
+
+Welcome to Anchorhead...
+
+[                 * THE FIRST DAY *
+  
+  I was far from home, and the spell of the eastern
+  sea was upon me.
+  
+  -- H.P. Lovecraft]
+
+
+ANCHORHEAD
+
+An interactive gothic by Michael S. Gentry
+
+(Type HELP or ABOUT for some useful information.)
+
+Release 5 / Serial number 990206 / Inform v6.15 Library 6/7
+
+Outside the Real Estate Office
+A grim little cul-de-sac, tucked away in a corner of the claustrophobic tangle
+of narrow, twisting avenues that largely constitute the older portion of
+Anchorhead. Like most of the streets in this city, it is ancient, shadowy, and
+leads essentially nowhere. The lane ends here at the real estate agent's office,
+which lies to the east, and winds its way back toward the center of town to the
+west. A narrow, garbage-choked alley opens to the southeast.
+
+>transcript
+Start of a transcript of
+ANCHORHEAD
+An interactive gothic by Michael S. Gentry
+
+
+(Type HELP or ABOUT for some useful information.)
+
+ Release 5 / Serial number 990206 / Inform v6.15 Library 6/7
+ Standard interpreter 1.1 (4F) / Library serial number 970918
+
+>look
+
+Outside the Real Estate Office
+A grim little cul-de-sac, tucked away in a corner of the claustrophobic tangle
+of narrow, twisting avenues that largely constitute the older portion of
+Anchorhead. Like most of the streets in this city, it is ancient, shadowy, and
+leads essentially nowhere. The lane ends here at the real estate agent's office,
+which lies to the east, and winds its way back toward the center of town to the
+west. A narrow, garbage-choked alley opens to the southeast.
+
+>e
+(opening the real estate office door first)
+It seems to be locked.
+
+>x door
+The door has a glass front with the name of the real estate company -- Benson &
+Brackhurst -- stenciled across it. The blinds are drawn, the lights are off
+inside, and no one appears to be home. Odd, since the agent knew you were coming
+today.
+
+In the distance, you can hear the lonesome keening of a train whistle drifting
+on the wind.
+
+>x glass
+The door has a glass front with the name of the real estate company -- Benson &
+Brackhurst -- stenciled across it. The blinds are drawn, the lights are off
+inside, and no one appears to be home. Odd, since the agent knew you were coming
+today.
+
+>unlock door
+(with the sky)
+(first taking the sky)
+How optimistic of you.
+
+>w
+
+Narrow Street
+As the lane winds along from east to west, it narrows until the steep, jagged
+rooftops on either side of the street practically touch each other. To the
+south, a side street leads across Whateley Bridge toward the center of town, and
+a twisting lane leads up a hill to the northwest. A short flight of steps to the
+north leads down to the local watering hole.
+
+>n
+You close your umbrella, as is your habit after coming indoors.
+
+Local Pub
+A dank, drafty old drinking hole lit by flickering, oil-burning lanterns. Smoke
+collects in greasy pools among the rafters, and shadows crowd thick around. The
+bar runs the length of the room to your right, while to the south a low doorway
+opens onto the street.
+
+Mill workers and fishermen occupy a few of the tables, drinking beer or puffing
+grimly at long-stemmed pipes. Each is wrapped in his solitude, soaking up the
+general miasma of dreary fatalism.
+
+The lantern sitting on the table nearest you sputters fitfully, throwing
+distorted shadows across the wall.
+
+>get lantern
+No one here looks as though they'd mind if you borrowed one of these lamps.
+Casually, you purloin the nearest one.
+
+>x lantern
+It's an old-fashioned hurricane lamp, with a tall glass chimney to protect it
+from the wind. The cotton wick burns fitfully in its reservoir of cheap oil.
+
+>x self
+You look good, considering. A bit rattled by recent events, perhaps, but well-
+poised and collected, all the same.
+
+>inventory
+You are wearing your wedding ring, your trenchcoat and your clothes; in
+addition, you have in your hands a lantern (providing light) and your umbrella.
+
+The pockets of your trenchcoat are empty.
+
+>put lantern in coat
+It wouldn't be very wise to put the lantern in your pocket while it's still
+burning.
+
+>turn off lantern
+That's not something you can switch.
+
+>unlight lantern
+That's not a verb I recognise.
+
+>x table
+It's just an ordinary-looking table.
+
+>x bar
+A dark and dour expanse of wood, pitted and scarred and stained with the rings
+from over a hundred years' worth of slopping beer mugs.
+
+>x workers
+The patrons of this place are taciturn and grim. No one speaks. No one looks
+anyone in the eye. No one, in fact, even looks up from his beer. A heavy aura of
+resignation -- and, it almost seems, dread -- hangs palpably over the whole
+crowd.
+
+>s
+As you make your way to the door, your foot strikes something under one of the
+tables.
+
+>look under table
+Some forgetful soul has left a flask underneath one of the tables, pushed into a
+shadowy corner.
+
+>get flask
+You pick up the flask. The label is faded and mostly peeled away, but what
+little you can make out seems to indicate that this is not a particularly
+distinguished brand of spirits. The words "bootleg" and "rotgut" come to mind,
+probably because they are the only words legible on what's left of the label.
+
+>put flask in coat
+You slip the flask into the pocket of your trenchcoat.
+
+>s
+The rain is still coming down, so you open your umbrella.
+
+Narrow Street
+As the lane winds along from east to west, it narrows until the steep, jagged
+rooftops on either side of the street practically touch each other. To the
+south, a side street leads across Whateley Bridge toward the center of town, and
+a twisting lane leads up a hill to the northwest. A short flight of steps to the
+north leads down to the local watering hole.
+
+A sudden gust of rain puts the lantern out.
+
+>w
+
+Junction
+To the north, a gap in the crowded press of gloomy buildings opens onto a
+country lane, heading out over a grassy heath. The main street continues to the
+east, while to the northwest, over the top of a steep rise, you can just make
+out the vaulted rooftops of the university.
+
+>nw
+
+University Court
+Isolated and serene within its high, ivy-covered walls, Miskaton University
+represents this benighted town's single, if somewhat dubious, claim to cultural
+achievement. Founded some time in the early 1800s, the school's reputation and
+enrollment have diminished somewhat as Anchorhead drifts further and further
+into the abyss of provincial backwaterism. Still, it is generally recognized for
+its collection of folklore and esoteric mythology (one of the oldest and most
+extensive on the east coast). The Board of Deans was also kind enough to offer
+Michael a full professorship upon hearing of his recently discovered heritage
+and his plans to move into the estate. Ivory tower, perhaps, but at least they
+take care of their own.
+
+There are numerous buildings surrounding this cobbled court, but the only one
+you are interested in is the library to the west, where Michael told you he'd be
+until he came back to the real estate agent's office to pick you up. Which,
+incidentally, he has not yet done.
+
+>w
+You close your umbrella, as is your habit after coming indoors.
+
+Library
+Shadows roost thickly in the vaulted ceiling, and small, green-shaded desk lamps
+cast pools of warm radiance here and there around the library's dim interior.
+You pause a moment to let the hushed peacefulness of this place soak in -- a
+welcome relief from the unsettling events of the day. An exit lies east, and a
+small alcove to the north houses the circulation counter.
+
+Peering through the shadows, you spot your husband sitting at one of the reading
+desks, absorbed in some sort of weighty tome and clearly oblivious to the time.
+
+>x lamps
+The lamps have curved, brass stands and frosted green shades; the kind of thing
+you'd expect to see on an accountant's desk in the 1930s.
+
+The reading lamp is currently switched on.
+
+>x husband
+Tall and a bit on the skinny side, in an endearingly awkward sort of way; a
+serious, thoughtful face topped with an unruly tangle of brown hair; deep brown
+eyes framed by wire-rimmed glasses -- yep, that's the man you married, all
+right.
+
+At the moment, Michael is largely absorbed in his reading, and is paying little
+attention to you.
+
+>x michael
+Tall and a bit on the skinny side, in an endearingly awkward sort of way; a
+serious, thoughtful face topped with an unruly tangle of brown hair; deep brown
+eyes framed by wire-rimmed glasses -- yep, that's the man you married, all
+right.
+
+At the moment, Michael is largely absorbed in his reading, and is paying little
+attention to you.
+
+>x book
+Michael looks up, startled, then realizes it's you and smiles. "Hi, hon," he
+says, closing the book and stretching. Then he glances at his watch. "Good
+grief, what happened to the time? I'm so sorry -- I just lost track." He smiles
+sheepishly.
+
+"Well?" he asks. "Did you get the keys?"
+
+>ask michael about keys
+"The real estate agent is supposed to be holding them at her office," he says.
+
+>ask michael about agent
+He frowns as you tell him about the real estate agent's disappearance. "That is
+rather odd," he says. "I wonder where she could be?"
+
+>save
+Ok.
+
+>ask michael about help
+You can't think of anything to say about that for the moment.
+
+>examine book
+Michael jerks the book away from you. "Excuse me," he says, a bit more sharply
+than you had expected, "I'll be done with it in a minute."
+
+>examine book
+It's obvious Michael is trying to hide something from you, and while you very
+much want to know what in the world it is, it would be best not to make a scene
+about it here.
+
+>ask michael about keys
+"The real estate agent is supposed to be holding them at her office," he says.
+
+>n
+
+Circulation Desk
+A high counter divides the public portion of the library from the reserved
+stacks -- all the more esoteric and mysterious volumes from the university's
+collection. If anything, the area behind the counter is even more shadowy than
+the side you're on. The main reading area lies south.
+
+Hanging on the wall next to the counter is a small, printed sign. Beneath the
+sign sits a heavy, dog-eared register, and sitting next to the register is a
+bell.
+
+>read sign
+"All restricted books must be signed for on the register, and may not be removed
+from this building. Please have your faculty ID ready when you make your
+request."
+
+>read register
+It's basically a log, recording what book was checked out, who checked it out,
+and when. There must be hundreds of names here.
+
+>ring bell
+
+Ding.
+
+A moment later, the gaunt and fishy-eyed librarian emerges silently from the
+shadows behind the counter.
+
+>x librarian
+Her slack, pallid skin looks as if it has seen little more than the inside of a
+cave for most of her life. She stares at you silently with disturbingly large
+and watery eyes.
+
+>ask librarian for help
+The librarian purses her thin, fishy lips at you. Apparently, she only lends out
+library books.
+
+>s
+Without a word, the librarian fades back into the shadows.
+

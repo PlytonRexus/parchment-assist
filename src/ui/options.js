@@ -26,7 +26,14 @@ class OptionsManager {
             document.getElementById('enableGemini').checked = settings.enableGemini;
             document.getElementById('preferLocal').checked = settings.preferLocal;
             document.getElementById('ollamaModel').value = settings.ollamaModel;
-            document.getElementById('geminiKey').value = settings.geminiKey;
+            // Display multi-key list if available, otherwise single key
+            const keys =
+                Array.isArray(settings.geminiKeys) && settings.geminiKeys.length
+                    ? settings.geminiKeys
+                    : settings.geminiKey
+                      ? [settings.geminiKey]
+                      : [];
+            document.getElementById('geminiKey').value = keys.join('\n');
             document.getElementById('timeout').value = settings.timeout / 1000;
 
             console.log('Settings loaded:', settings);
@@ -82,7 +89,14 @@ class OptionsManager {
         try {
             const enableOllama = document.getElementById('enableOllama').checked;
             const enableGemini = document.getElementById('enableGemini').checked;
-            const geminiKey = document.getElementById('geminiKey').value.trim();
+            const geminiKeyRaw = document.getElementById('geminiKey').value.trim();
+
+            // Support multiple API keys (one per line)
+            const geminiKeys = geminiKeyRaw
+                .split(/[\n,]+/)
+                .map((k) => k.trim())
+                .filter((k) => k.length > 0);
+            const geminiKey = geminiKeys[0] || '';
 
             const activeProviders = [];
             if (enableOllama) {
@@ -98,6 +112,7 @@ class OptionsManager {
                 preferLocal: document.getElementById('preferLocal').checked,
                 ollamaModel: document.getElementById('ollamaModel').value.trim() || 'llama3',
                 geminiKey,
+                geminiKeys,
                 timeout: parseInt(document.getElementById('timeout').value) * 1000,
                 activeProviders,
             };
@@ -196,74 +211,72 @@ class OptionsManager {
     async testGeminiConnection() {
         const button = document.getElementById('testGemini');
         const status = document.getElementById('geminiStatus');
-        const apiKey = document.getElementById('geminiKey').value.trim();
+        const rawValue = document.getElementById('geminiKey').value.trim();
+        const apiKeys = rawValue
+            .split(/[\n,]+/)
+            .map((k) => k.trim())
+            .filter((k) => k.length > 0);
 
-        if (!apiKey) {
+        if (!apiKeys.length) {
             this.showTestResult('\n❌ Gemini API key is required');
             return;
         }
 
         button.disabled = true;
         status.className = 'status-indicator status-testing';
-        this.showTestResult('\nTesting Gemini connection...\n');
+        this.showTestResult(`\nTesting ${apiKeys.length} Gemini API key(s)...\n`);
 
-        try {
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 10000);
+        let anySuccess = false;
 
-            const response = await fetch(
-                'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent',
-                {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'x-goog-api-key': apiKey,
-                    },
-                    body: JSON.stringify({
-                        contents: [
-                            {
-                                parts: [
-                                    {
-                                        text: 'Hello, respond with just "OK"',
-                                    },
-                                ],
-                            },
-                        ],
-                    }),
-                    signal: controller.signal,
+        for (let i = 0; i < apiKeys.length; i++) {
+            const apiKey = apiKeys[i];
+            const label = apiKeys.length > 1 ? `Key ${i + 1}: ` : '';
+            try {
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+                const response = await fetch(
+                    'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent',
+                    {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'x-goog-api-key': apiKey,
+                        },
+                        body: JSON.stringify({
+                            contents: [{ parts: [{ text: 'Hello, respond with just "OK"' }] }],
+                        }),
+                        signal: controller.signal,
+                    }
+                );
+
+                clearTimeout(timeoutId);
+
+                if (response.ok) {
+                    const data = await response.json();
+                    const text = data.candidates?.[0]?.content?.parts?.[0]?.text || 'No response';
+                    this.appendTestResult(`✅ ${label}Connected — ${text.slice(0, 40).trim()}`);
+                    anySuccess = true;
+                } else {
+                    const errorData = await response.json().catch(() => ({}));
+                    const msg = errorData.error?.message || response.statusText;
+                    if (msg.includes('API_KEY_INVALID')) {
+                        this.appendTestResult(`❌ ${label}Invalid API key`);
+                    } else {
+                        this.appendTestResult(`❌ ${label}HTTP ${response.status}: ${msg}`);
+                    }
                 }
-            );
-
-            clearTimeout(timeoutId);
-
-            if (response.ok) {
-                const data = await response.json();
-                const text = data.candidates?.[0]?.content?.parts?.[0]?.text || 'No response';
-                status.className = 'status-indicator status-online';
-                this.appendTestResult(
-                    `✅ Gemini connected successfully!\nResponse: ${text.slice(0, 50)}...`
-                );
-            } else {
-                const errorData = await response.json().catch(() => ({}));
-                throw new Error(
-                    `HTTP ${response.status}: ${errorData.error?.message || response.statusText}`
-                );
+            } catch (error) {
+                if (error.name === 'AbortError') {
+                    this.appendTestResult(`❌ ${label}Timeout`);
+                } else {
+                    this.appendTestResult(`❌ ${label}${error.message}`);
+                }
             }
-        } catch (error) {
-            status.className = 'status-indicator status-offline';
-
-            if (error.name === 'AbortError') {
-                this.appendTestResult(`❌ Gemini connection timeout`);
-            } else if (error.message.includes('API_KEY_INVALID')) {
-                this.appendTestResult(
-                    `❌ Invalid Gemini API key\nGet a valid key from Google AI Studio`
-                );
-            } else {
-                this.appendTestResult(`❌ Gemini error: ${error.message}`);
-            }
-        } finally {
-            button.disabled = false;
         }
+
+        status.className = `status-indicator ${anySuccess ? 'status-online' : 'status-offline'}`;
+        button.disabled = false;
     }
 
     showTestResult(message) {
@@ -300,6 +313,8 @@ class OptionsManager {
         };
     }
 }
+
+export { OptionsManager };
 
 // Initialize when DOM is ready
 document.addEventListener('DOMContentLoaded', () => {

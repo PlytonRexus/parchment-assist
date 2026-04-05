@@ -250,8 +250,13 @@
       </div>
 
       <div class="form-group">
-        <label for="geminiKey">Google Gemini API Key:</label>
-        <input type="password" id="geminiKey" placeholder="Enter your Gemini API key" />
+        <label for="geminiKey">Google Gemini API Key(s):</label>
+        <textarea
+          id="geminiKey"
+          rows="3"
+          placeholder="One API key per line (multiple keys rotate on rate limits)"
+          style="font-family: monospace; font-size: 12px; resize: vertical"
+        ></textarea>
         <div class="help-text">
           Get a free key from
           <a href="https://makersuite.google.com/app/apikey" target="_blank">Google AI Studio</a>
@@ -331,6 +336,6 @@
       </p>
     </div>
 
-    <script src="options.js"></script>
+    <script type="module" src="options.js"></script>
   </body>
 </html>

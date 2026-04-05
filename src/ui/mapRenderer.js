@@ -13,6 +13,19 @@ const DIRECTION_VECTORS = {
     // up/down/in/out: no positional bias (rendered as dashed lines instead)
 };
 
+// Grid offsets for BFS-based directional layout (row, col)
+const GRID_OFFSETS = {
+    north: [-1, 0],
+    south: [1, 0],
+    east: [0, 1],
+    west: [0, -1],
+    northeast: [-1, 1],
+    northwest: [-1, -1],
+    southeast: [1, 1],
+    southwest: [1, -1],
+    // up/down/in/out: no grid offset — same cell, different floor
+};
+
 // Abbreviated direction labels for edge display
 function abbreviateDirection(label) {
     const abbr = {
@@ -182,6 +195,267 @@ export class ForceLayout {
     }
 }
 
+// ── DirectionalLayout ────────────────────────────────────────────────────────
+
+export class DirectionalLayout {
+    constructor(connections, { spacing = 180 } = {}) {
+        this.connections = connections;
+        this.spacing = spacing;
+    }
+
+    run(rootRoom, roomNames) {
+        if (!roomNames || roomNames.length === 0) {
+            return {};
+        }
+
+        // Build adjacency list
+        const adj = {};
+        for (const name of roomNames) {
+            adj[name] = [];
+        }
+        for (const conn of this.connections) {
+            if (adj[conn.from]) {
+                adj[conn.from].push({ neighbor: conn.to, direction: conn.label });
+            }
+            if (adj[conn.to]) {
+                adj[conn.to].push({
+                    neighbor: conn.from,
+                    direction: conn.reverseLabel || conn.label,
+                });
+            }
+        }
+
+        const gridMap = {}; // roomName → { row, col, floor }
+        const occupied = new Set(); // "row,col" strings
+
+        // BFS from root
+        const root =
+            rootRoom && roomNames.includes(rootRoom) ? rootRoom : roomNames.slice().sort()[0];
+        gridMap[root] = { row: 0, col: 0, floor: 0 };
+        occupied.add('0,0');
+
+        const queue = [root];
+        while (queue.length > 0) {
+            const current = queue.shift();
+            const { row, col, floor } = gridMap[current];
+
+            for (const { neighbor, direction } of adj[current] || []) {
+                if (gridMap[neighbor]) {
+                    continue;
+                }
+
+                const dir = direction ? direction.toLowerCase() : null;
+                const offset = dir ? GRID_OFFSETS[dir] : null;
+
+                if (offset) {
+                    // Cardinal/diagonal direction
+                    let targetRow = row + offset[0];
+                    let targetCol = col + offset[1];
+                    if (occupied.has(`${targetRow},${targetCol}`)) {
+                        [targetRow, targetCol] = this._resolveConflict(
+                            targetRow,
+                            targetCol,
+                            offset,
+                            occupied
+                        );
+                    }
+                    gridMap[neighbor] = {
+                        row: targetRow,
+                        col: targetCol,
+                        floor: floor,
+                    };
+                    occupied.add(`${targetRow},${targetCol}`);
+                } else if (dir === 'up' || dir === 'in') {
+                    gridMap[neighbor] = { row, col, floor: floor + 1 };
+                } else if (dir === 'down' || dir === 'out') {
+                    gridMap[neighbor] = { row, col, floor: floor - 1 };
+                } else {
+                    // Unknown direction: place east as fallback
+                    let targetRow = row;
+                    let targetCol = col + 1;
+                    if (occupied.has(`${targetRow},${targetCol}`)) {
+                        [targetRow, targetCol] = this._resolveConflict(
+                            targetRow,
+                            targetCol,
+                            [0, 1],
+                            occupied
+                        );
+                    }
+                    gridMap[neighbor] = {
+                        row: targetRow,
+                        col: targetCol,
+                        floor: floor,
+                    };
+                    occupied.add(`${targetRow},${targetCol}`);
+                }
+
+                queue.push(neighbor);
+            }
+        }
+
+        // Place disconnected rooms
+        this._placeDisconnected(roomNames, gridMap, occupied, adj);
+
+        return this._toPixels(gridMap);
+    }
+
+    _resolveConflict(row, col, offset, occupied) {
+        // Nudge in preferred direction up to 5 times
+        for (let i = 1; i <= 5; i++) {
+            const r = row + offset[0] * i;
+            const c = col + offset[1] * i;
+            if (!occupied.has(`${r},${c}`)) {
+                return [r, c];
+            }
+        }
+        // Spiral fallback
+        for (let dist = 1; dist <= 20; dist++) {
+            for (let dr = -dist; dr <= dist; dr++) {
+                for (let dc = -dist; dc <= dist; dc++) {
+                    if (Math.abs(dr) + Math.abs(dc) !== dist) {
+                        continue;
+                    }
+                    const r = row + dr;
+                    const c = col + dc;
+                    if (!occupied.has(`${r},${c}`)) {
+                        return [r, c];
+                    }
+                }
+            }
+        }
+        return [row, col];
+    }
+
+    _placeDisconnected(roomNames, gridMap, occupied, adj) {
+        const remaining = roomNames.filter((name) => !gridMap[name]);
+        if (remaining.length === 0) {
+            return;
+        }
+
+        // Group remaining into connected components
+        const visited = new Set();
+        const components = [];
+        for (const room of remaining) {
+            if (visited.has(room)) {
+                continue;
+            }
+            const component = [];
+            const stack = [room];
+            while (stack.length > 0) {
+                const r = stack.pop();
+                if (visited.has(r) || gridMap[r]) {
+                    continue;
+                }
+                visited.add(r);
+                component.push(r);
+                for (const { neighbor } of adj[r] || []) {
+                    if (!visited.has(neighbor) && !gridMap[neighbor]) {
+                        stack.push(neighbor);
+                    }
+                }
+            }
+            if (component.length > 0) {
+                components.push(component);
+            }
+        }
+
+        // Find bounding box of placed rooms
+        let maxRow = 0;
+        for (const name in gridMap) {
+            if (gridMap[name].row > maxRow) {
+                maxRow = gridMap[name].row;
+            }
+        }
+
+        let offsetRow = maxRow + 2;
+        for (const component of components) {
+            // BFS each component from its first member
+            const compRoot = component[0];
+            gridMap[compRoot] = { row: offsetRow, col: 0, floor: 0 };
+            occupied.add(`${offsetRow},0`);
+
+            const queue = [compRoot];
+            while (queue.length > 0) {
+                const current = queue.shift();
+                const { row, col, floor } = gridMap[current];
+
+                for (const { neighbor, direction } of adj[current] || []) {
+                    if (gridMap[neighbor]) {
+                        continue;
+                    }
+                    const dir = direction ? direction.toLowerCase() : null;
+                    const offset = dir ? GRID_OFFSETS[dir] : null;
+
+                    if (offset) {
+                        let targetRow = row + offset[0];
+                        let targetCol = col + offset[1];
+                        if (occupied.has(`${targetRow},${targetCol}`)) {
+                            [targetRow, targetCol] = this._resolveConflict(
+                                targetRow,
+                                targetCol,
+                                offset,
+                                occupied
+                            );
+                        }
+                        gridMap[neighbor] = {
+                            row: targetRow,
+                            col: targetCol,
+                            floor: floor,
+                        };
+                        occupied.add(`${targetRow},${targetCol}`);
+                    } else if (dir === 'up' || dir === 'in') {
+                        gridMap[neighbor] = { row, col, floor: floor + 1 };
+                    } else if (dir === 'down' || dir === 'out') {
+                        gridMap[neighbor] = { row, col, floor: floor - 1 };
+                    } else {
+                        let targetRow = row;
+                        let targetCol = col + 1;
+                        if (occupied.has(`${targetRow},${targetCol}`)) {
+                            [targetRow, targetCol] = this._resolveConflict(
+                                targetRow,
+                                targetCol,
+                                [0, 1],
+                                occupied
+                            );
+                        }
+                        gridMap[neighbor] = {
+                            row: targetRow,
+                            col: targetCol,
+                            floor: floor,
+                        };
+                        occupied.add(`${targetRow},${targetCol}`);
+                    }
+                    queue.push(neighbor);
+                }
+            }
+
+            // Update offset for next component
+            let compMaxRow = offsetRow;
+            for (const name of component) {
+                if (gridMap[name] && gridMap[name].row > compMaxRow) {
+                    compMaxRow = gridMap[name].row;
+                }
+            }
+            offsetRow = compMaxRow + 2;
+        }
+    }
+
+    _toPixels(gridMap) {
+        const result = {};
+        for (const name in gridMap) {
+            const { row, col, floor } = gridMap[name];
+            let x = col * this.spacing;
+            let y = row * this.spacing;
+            if (floor !== 0) {
+                x += floor * 15;
+                y += floor * 15;
+            }
+            result[name] = { x, y, floor };
+        }
+        return result;
+    }
+}
+
 // ── SVGMapRenderer ───────────────────────────────────────────────────────────
 
 export class SVGMapRenderer {
@@ -194,6 +468,7 @@ export class SVGMapRenderer {
         this.transform = { x: 0, y: 0, scale: 1 };
         this._isPanning = false;
         this._panStart = null;
+        this._rafId = null;
         this._hasRendered = false;
 
         // Bound handlers for cleanup
@@ -270,21 +545,9 @@ export class SVGMapRenderer {
         }
 
         // Build layout
-        const nodes = ForceLayout.gridPositions(roomNames);
         const edges = this._deduplicateEdges(connections);
-        const directionalEdges = edges.map((e) => ({
-            source: e.from,
-            target: e.to,
-            direction: e.label,
-        }));
-        const layout = new ForceLayout(
-            nodes,
-            edges.map((e) => ({ source: e.from, target: e.to })),
-            {
-                directionalEdges,
-            }
-        );
-        const positions = layout.run();
+        const layout = new DirectionalLayout(connections, { spacing: 180 });
+        const positions = layout.run(currentRoom, roomNames);
 
         // Draw edges first (so they appear behind nodes)
         for (const edge of edges) {
@@ -329,12 +592,22 @@ export class SVGMapRenderer {
             if (edgeMap.has(key)) {
                 const existing = edgeMap.get(key);
                 existing.bidirectional = true;
-                // Add the reverse label
+                // Merge accessible/confirmed (either direction inaccessible/unconfirmed → whole edge)
+                if (conn.accessible === false) {
+                    existing.accessible = false;
+                }
+                if (conn.confirmed === false) {
+                    existing.confirmed = false;
+                }
+                // Add the reverse label and traversed state
                 if (conn.from !== existing.from) {
                     existing.reverseLabel = conn.label;
+                    existing.reverseTraversed = !!conn.traversed;
                 } else {
                     existing.reverseLabel = existing.label;
+                    existing.reverseTraversed = !!existing.traversed;
                     existing.label = conn.label;
+                    existing.traversed = !!conn.traversed;
                 }
             } else {
                 edgeMap.set(key, {
@@ -343,6 +616,10 @@ export class SVGMapRenderer {
                     label: conn.label,
                     bidirectional: false,
                     reverseLabel: null,
+                    traversed: !!conn.traversed,
+                    reverseTraversed: false,
+                    accessible: conn.accessible !== false,
+                    confirmed: conn.confirmed !== false,
                 });
             }
         }
@@ -392,19 +669,51 @@ export class SVGMapRenderer {
             ['up', 'down', 'in', 'out'].includes(edge.label?.toLowerCase()) ||
             ['up', 'down', 'in', 'out'].includes(edge.reverseLabel?.toLowerCase());
 
+        const isInaccessible = edge.accessible === false;
+        const isUnconfirmed = edge.confirmed === false;
+
+        let edgeClass = 'map-edge';
+        if (isInaccessible) {
+            edgeClass += ' map-edge-inaccessible';
+        } else if (isUnconfirmed) {
+            edgeClass += ' map-edge-unconfirmed';
+        } else if (isVertical) {
+            edgeClass += ' map-edge-vertical';
+        }
+
         const line = document.createElementNS(SVG_NS, 'line');
-        line.setAttribute('class', isVertical ? 'map-edge map-edge-vertical' : 'map-edge');
+        line.setAttribute('class', edgeClass);
         line.setAttribute('x1', String(x1));
         line.setAttribute('y1', String(y1));
         line.setAttribute('x2', String(x2));
         line.setAttribute('y2', String(y2));
-        line.setAttribute('marker-end', 'url(#arrowhead)');
-        if (edge.bidirectional) {
-            line.setAttribute('marker-start', 'url(#arrowhead-start)');
+
+        if (!isUnconfirmed) {
+            line.setAttribute('marker-end', 'url(#arrowhead)');
+            if (edge.bidirectional) {
+                line.setAttribute('marker-start', 'url(#arrowhead-start)');
+            }
         }
-        if (isVertical) {
+
+        if (isInaccessible) {
+            line.setAttribute('stroke', '#e67e22');
+            line.setAttribute('stroke-dasharray', '6,3');
+        } else if (isUnconfirmed) {
+            line.setAttribute('stroke-dasharray', '2,4');
+            line.setAttribute('stroke-opacity', '0.4');
+        } else if (isVertical) {
             line.setAttribute('stroke-dasharray', '5,4');
         }
+
+        // Traversed-edge styling (only for normal edges)
+        if (!isInaccessible && !isUnconfirmed) {
+            const isTraversed = edge.traversed || (edge.bidirectional && edge.reverseTraversed);
+            if (isTraversed) {
+                line.setAttribute('stroke', '#5dade2');
+                line.setAttribute('stroke-width', '2.5');
+            }
+        }
+
         this.viewport.appendChild(line);
 
         // Direction label at midpoint (abbreviated)
@@ -416,9 +725,16 @@ export class SVGMapRenderer {
             labelText.setAttribute('x', String(midX));
             labelText.setAttribute('y', String(midY - 6));
             labelText.setAttribute('text-anchor', 'middle');
-            const abbrev = abbreviateDirection(edge.label);
+            let abbrev = abbreviateDirection(edge.label);
             const reverseAbbrev = edge.reverseLabel ? abbreviateDirection(edge.reverseLabel) : null;
-            labelText.textContent = reverseAbbrev ? `${abbrev} / ${reverseAbbrev}` : abbrev;
+            if (isUnconfirmed) {
+                abbrev += '?';
+            }
+            let labelContent = reverseAbbrev ? `${abbrev} / ${reverseAbbrev}` : abbrev;
+            if (isInaccessible) {
+                labelContent += ' \uD83D\uDD12';
+            }
+            labelText.textContent = labelContent;
             this.viewport.appendChild(labelText);
         }
     }
@@ -429,8 +745,16 @@ export class SVGMapRenderer {
     }
 
     _drawNode(name, pos, isCurrent, roomData) {
+        const isUnvisited = roomData && roomData.status === 'unvisited';
         const group = document.createElementNS(SVG_NS, 'g');
-        group.setAttribute('class', isCurrent ? 'map-node map-node-current' : 'map-node');
+        let nodeClass = 'map-node';
+        if (isCurrent) {
+            nodeClass += ' map-node-current';
+        }
+        if (isUnvisited) {
+            nodeClass += ' map-node-unvisited';
+        }
+        group.setAttribute('class', nodeClass);
         group.setAttribute('data-room', name);
 
         const displayName = name.length > 16 ? name.substring(0, 16) + '...' : name;
@@ -454,6 +778,20 @@ export class SVGMapRenderer {
         text.setAttribute('dominant-baseline', 'central');
         text.textContent = displayName;
         group.appendChild(text);
+
+        // Floor badge for elevation
+        const floor = pos.floor || 0;
+        if (floor !== 0) {
+            const badge = document.createElementNS(SVG_NS, 'text');
+            badge.setAttribute('class', 'map-floor-badge');
+            badge.setAttribute('x', String(pos.x));
+            badge.setAttribute('y', String(pos.y + height / 2 + 12));
+            badge.setAttribute('text-anchor', 'middle');
+            badge.setAttribute('font-size', '9');
+            badge.textContent = floor > 0 ? `\u2191${floor}` : `\u2193${Math.abs(floor)}`;
+            group.appendChild(badge);
+            group.setAttribute('opacity', '0.85');
+        }
 
         // Click handler
         group.addEventListener('click', (e) => {
@@ -484,6 +822,23 @@ export class SVGMapRenderer {
         const title = document.createElement('h4');
         title.textContent = roomName;
         tooltip.appendChild(title);
+
+        // Unvisited badge
+        if (roomData && roomData.status === 'unvisited') {
+            const badge = document.createElement('span');
+            badge.className = 'map-tooltip-unvisited-badge';
+            badge.textContent = 'Not yet visited';
+            tooltip.appendChild(badge);
+        }
+
+        // Room description
+        if (roomData && roomData.description && roomData.description.trim()) {
+            const desc = document.createElement('div');
+            desc.className = 'map-tooltip-description';
+            const text = roomData.description.trim();
+            desc.textContent = text.length > 120 ? text.substring(0, 120) + '...' : text;
+            tooltip.appendChild(desc);
+        }
 
         // Items
         if (roomData && Array.isArray(roomData.items) && roomData.items.length > 0) {
@@ -573,7 +928,7 @@ export class SVGMapRenderer {
         }
         this.transform.x = e.clientX - this._panStart.x;
         this.transform.y = e.clientY - this._panStart.y;
-        this._applyTransform();
+        this._scheduleTransform();
     }
 
     _onMouseUp() {
@@ -587,7 +942,7 @@ export class SVGMapRenderer {
     _onWheel(e) {
         e.preventDefault();
         const scaleFactor = e.deltaY < 0 ? 1.1 : 0.9;
-        const newScale = Math.max(0.3, Math.min(3.0, this.transform.scale * scaleFactor));
+        const newScale = Math.max(0.1, Math.min(10.0, this.transform.scale * scaleFactor));
 
         // Zoom toward cursor position
         const svgRect = this.svg.getBoundingClientRect
@@ -601,7 +956,17 @@ export class SVGMapRenderer {
         this.transform.y = cursorY - (cursorY - this.transform.y) * ratio;
         this.transform.scale = newScale;
 
-        this._applyTransform();
+        this._scheduleTransform();
+    }
+
+    _scheduleTransform() {
+        if (this._rafId !== null) {
+            return;
+        }
+        this._rafId = requestAnimationFrame(() => {
+            this._rafId = null;
+            this._applyTransform();
+        });
     }
 
     _applyTransform() {
@@ -642,6 +1007,10 @@ export class SVGMapRenderer {
 
     destroy() {
         this._dismissTooltip();
+        if (this._rafId !== null) {
+            cancelAnimationFrame(this._rafId);
+            this._rafId = null;
+        }
         if (this.svg) {
             this.svg.removeEventListener('mousedown', this._onMouseDown);
             this.svg.removeEventListener('mousemove', this._onMouseMove);

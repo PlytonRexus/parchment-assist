@@ -2,7 +2,9 @@
  * GameStateManager Unit Tests
  */
 
+import { jest } from '@jest/globals';
 import { GameStateManager } from '../../src/content/gameStateManager.js';
+import { GenericParchmentAdapter } from '../../src/content/siteAdapters.js';
 
 describe('GameStateManager', () => {
     let gsm;
@@ -190,8 +192,7 @@ describe('GameStateManager', () => {
             expect(gsm.rejectedCommands.size).toBe(0);
         });
 
-        test('filterByRejections removes action when count reaches threshold', () => {
-            gsm.recordRejection('go out');
+        test('filterByRejections removes action after single rejection', () => {
             gsm.recordRejection('go out');
             const interactables = [
                 {
@@ -203,20 +204,19 @@ describe('GameStateManager', () => {
             expect(gsm.filterByRejections(interactables)).toHaveLength(0);
         });
 
-        test('filterByRejections keeps action when count is below threshold', () => {
+        test('filterByRejections keeps unrejected actions', () => {
             gsm.recordRejection('go out');
             const interactables = [
                 {
-                    name: 'out',
+                    name: 'door',
                     type: 'exit',
-                    actions: [{ label: 'Go out', command: 'go out', confidence: 0.8 }],
+                    actions: [{ label: 'Open', command: 'open door', confidence: 0.8 }],
                 },
             ];
             expect(gsm.filterByRejections(interactables)).toHaveLength(1);
         });
 
         test('filterByRejections removes only rejected actions, keeps others', () => {
-            gsm.recordRejection('go out');
             gsm.recordRejection('go out');
             const interactables = [
                 {
@@ -253,6 +253,54 @@ describe('GameStateManager', () => {
 
         test('filterByRejections returns empty array for undefined input', () => {
             expect(gsm.filterByRejections(undefined)).toEqual([]);
+        });
+    });
+
+    describe('Site Adapter Integration', () => {
+        // Hostname-based checks in isParchmentPage() are covered by the adapter
+        // matches() tests in siteAdapters.test.js. Here we test the remaining branches.
+
+        test('isParchmentPage returns true when __parchmentAssistManualEnable is set', () => {
+            window.__parchmentAssistManualEnable = true;
+            document.body.innerHTML = '<div>Just a page</div>';
+            expect(gsm.isParchmentPage()).toBe(true);
+            delete window.__parchmentAssistManualEnable;
+        });
+
+        test('isParchmentPage returns true via #parchment element (adapter-independent check)', () => {
+            document.body.innerHTML = '<div id="parchment">Long enough game text here</div>';
+            expect(gsm.isParchmentPage()).toBeTruthy();
+        });
+
+        test('findInputField delegates to adapter findInputField', () => {
+            const mockAdapter = {
+                findInputField: jest.fn(() => null),
+                findOutputArea: jest.fn(() => null),
+            };
+            gsm._siteAdapter = mockAdapter;
+            gsm.findInputField();
+            expect(mockAdapter.findInputField).toHaveBeenCalled();
+        });
+
+        test('findOutputArea delegates to adapter findOutputArea', () => {
+            const mockAdapter = {
+                findInputField: jest.fn(() => null),
+                findOutputArea: jest.fn(() => null),
+            };
+            gsm._siteAdapter = mockAdapter;
+            gsm.findOutputArea();
+            expect(mockAdapter.findOutputArea).toHaveBeenCalled();
+        });
+
+        test('getAdapter returns GenericParchmentAdapter for jsdom hostname (localhost)', () => {
+            const adapter = gsm.getAdapter();
+            expect(adapter).toBeInstanceOf(GenericParchmentAdapter);
+        });
+
+        test('getAdapter caches the adapter on subsequent calls', () => {
+            const first = gsm.getAdapter();
+            const second = gsm.getAdapter();
+            expect(first).toBe(second);
         });
     });
 });

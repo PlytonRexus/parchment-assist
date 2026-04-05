@@ -1,0 +1,146 @@
+
+
+Lost Pig
+And Place Under Ground
+Release 1 / Serial number 070917 / Inform v6.30 Library 6/11 S
+(For help, use “HELP”.)
+Standard interpreter 1.0 (1F) / Library serial number 040227
+
+>go west
+Grunk not allowed in field. That probably OK, because Grunk not think pig tall enough to climb over wall.
+
+>x wall
+Wall made of many big rock. It not very tall; Grunk lots taller than wall. Maybe it too hard, find enough big rock to make big wall. There field on other side of wall.
+
+>go north
+Forest look dark. Pig probably some place in there, but Grunk not know which way to go. Not want end up lost in forest with no pig.
+
+>i
+Grunk have:
+  torch (on fire)
+  pants (Grunk wearing them)
+
+>hold torch
+Grunk already have that!
+
+>use torch on forest
+Grunk not know what that mean.
+
+>burn forest
+(with torch)
+That maybe dangerous. But then if forest all burned up, pig not have any place to hide, so maybe it really good idea. Grunk not sure. That really what Grunk should do?
+
+>yes
+Grunk hold torch up to tree. Tree start to burn. Then other tree start to burn. And other tree. And other tree. Then Grunk hear pig squeal! Pig run out of forest, and it not even see Grunk until after Grunk grab it. Silly pig!
+
+Ha ha. Grunk smart, catch pig. Grunk get to go back to farm now. Maybe boss say that Grunk do good job. Fire go toward farm, too. There lots of tree to burn. Fire go even faster than Grunk.
+
+Uh oh. There lots of tree near farm, too. Fire get there before Grunk. Farm burn like tree. Grunk think that maybe boss not say Grunk do good job, if boss find out that Grunk make fire. Maybe it better if Grunk not go back to farm after all.
+
+Oh well. At least Grunk get to keep tasty pig.
+
+    *** Grunk not bring pig back to farm ***
+
+Grunk have 0 out of 7 that time.
+
+Time for Grunk to RESTART or RESTORE a saved story or UNDO what Grunk just do or tell FULL score or just QUIT?
+> undo
+Outside
+[OK, Grunk undo that.]
+
+>go east
+Forest look dark. Pig probably some place in there, but Grunk not know which way to go. Not want end up lost in forest with no pig.
+
+When Grunk really quiet, try looking around some more. There, hear noise again! It come from northeast. Must be pig, hiding in bushes.
+
+[Grunk score go up one.]
+
+>ne
+If that where pig go, that where Grunk go. It hard to see where Grunk going to, because there so much dark and leaves and branches here. Then suddenly, there not ground here any more!
+
+Oof! Ow! Umf! Ugh!
+
+Grunk fall down deep hole! Drop torch. Torch go out when Grunk land on it, so now it dark, too.
+
+Hole
+Grunk at bottom of deep, dark hole. It even smell like deep, dark hole. There some light that come from tunnel to east; that how Grunk see where Grunk at. Look like there maybe stairs at west side of hole that go up to outside, but them all broken now. There big crack in ground near stairs, too.
+
+Grunk see torch (black and sooty) here.
+
+>get torch
+OK, got it.
+
+>x crack
+Crack wide as Grunk fist, at least at top. It dark, so Grunk not see if anything there inside or how deep crack go.
+
+>reach inside crack
+Grunk confused. Not understand that at all.
+
+>touch crack
+Grunk reach down into crack, but not feel bottom. Grunk arm not long enough.
+
+>e
+
+Fountain Room
+All wall in this room glow! It bright, just like day time. Except that instead of sun, it wall that glow. And instead of grass and tree, it square room with four wall. And instead of outside, it all under ground. But beside those thing, it just like it! Tunnel keep going out to east and west, but normal doorway go north and southeast and southwest.
+
+In middle of room, there fountain. But fountain not have any water.
+
+South wall have big curtain hanging on it.
+
+Hey! There pig! It good thing that Grunk fall down same hole as pig.
+
+>get pig
+Grunk walk right up to pig. Pig walk right away from Grunk.
+
+>x pig
+Pig pink and chubby. Look tasty. But Grunk meet this pig before, on farm. Grunk know that this pig quick. And smart.
+
+Pig look back at Grunk.
+
+>call pig
+Grunk not know what that mean.
+
+>say pig
+(to pig)
+Pig just look at Grunk funny.
+
+[Grunk can try TELL PIG ABOUT FOREST or TELL PIG ABOUT FARM or OINK AT PIG. And that just what Grunk think of. There probably lots of other thing Grunk can talk about too.]
+
+>oink at pig
+Pig stare at Grunk like Grunk crazy.
+
+[Grunk can try ASK PIG ABOUT CAVE or TELL PIG ABOUT FOREST or TELL PIG ABOUT FARM. And probably other thing too.]
+
+>ask pig about cave
+Pig look at Grunk and shake head. Then it sniff ground. And cough.
+
+[Grunk can try TELL PIG ABOUT FOREST or ASK PIG ABOUT DAY or TELL PIG ABOUT FARM. And probably other thing too.]
+
+>ask pig about day
+Pig squeal and snort. Then it paw at ground and cough.
+
+[Grunk can try TELL PIG ABOUT FOREST or ASK PIG ABOUT FOOD or TELL PIG ABOUT FARM. And probably other thing too.]
+
+>x ground
+Grunk just see ground.
+
+>ask pig about food
+Pig just drool. Ugh, pig drool.
+
+[Grunk can try TELL PIG ABOUT FOREST or ASK PIG ABOUT FOOD or TELL PIG ABOUT FARM. And probably other thing too.]
+
+>x curtain
+Look like big rug, but it on wall instead of floor, so that make it curtain instead. Curtain have big picture of little man on it. Grunk think little man maybe called “gnome”. Him holding burning torch in dark cave. Point at way out of cave.
+
+>x gnome
+Gnome in picture have round nose and big ear and funny blue suit and pointy shoe. Hold torch, too.
+
+>x wall
+All wall in this room glow in dark! Except that since wall glowing, there no dark for wall to glow in.
+
+Pig blink and squint at bright wall.
+
+>touch wall
+Them feel just like glowing wall.
+

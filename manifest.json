@@ -7,7 +7,10 @@
   "host_permissions": [
     "http://localhost:11434/*",
     "https://generativelanguage.googleapis.com/*",
-    "https://iplayif.com/*"
+    "https://iplayif.com/*",
+    "https://textadventures.co.uk/*",
+    "https://www.textadventures.co.uk/*",
+    "https://ifcomp.org/*"
   ],
   "background": {
     "service_worker": "src/background/service-worker.js",
@@ -15,7 +18,13 @@
   },
   "content_scripts": [
     {
-      "matches": ["https://iplayif.com/*", "http://iplayif.com/*"],
+      "matches": [
+        "https://iplayif.com/*",
+        "http://iplayif.com/*",
+        "https://textadventures.co.uk/*",
+        "https://www.textadventures.co.uk/*",
+        "https://ifcomp.org/*"
+      ],
       "js": ["src/content/content-loader.js"],
       "css": ["src/ui/ui.css"],
       "run_at": "document_idle"
@@ -39,15 +48,18 @@
         "src/content/gameStateManager.js",
         "src/content/commandExecutor.js",
         "src/content/textAnnotator.js",
+        "src/content/siteAdapters.js",
         "src/ui/uiManager.js",
         "src/ui/mapRenderer.js",
         "src/helpers/htmlCleaner.js",
         "src/helpers/parserFeedback.js",
+        "src/helpers/textMiner.js",
+        "src/helpers/interactableMerger.js",
         "src/lib/npc.js",
         "src/lib/mapManager.js",
         "src/lib/stuckDetector.js"
       ],
-      "matches": ["https://iplayif.com/*", "http://iplayif.com/*"]
+      "matches": ["<all_urls>"]
     }
   ],
   "content_security_policy": {

@@ -32,13 +32,13 @@ describe('ParchmentAssist and MapManager Integration', () => {
             exits: [{ direction: 'west', room: 'Cellar' }],
         };
 
-        // Simulate receiving map data
-        parchmentAssist.mapManager.addRoom('Troll Room', { exits: mockMapData.exits });
+        // Simulate receiving map data through updateMap (normalizes exits)
+        parchmentAssist.mapManager.updateMap(mockMapData);
 
-        // Verify that the room was added
+        // Verify that the room was added with normalized exits
         const room = parchmentAssist.mapManager.getRoom('Troll Room');
         expect(room).toBeDefined();
-        expect(room.exits).toEqual(mockMapData.exits);
+        expect(room.exits.west).toBe('Cellar');
     });
 });
 
@@ -94,13 +94,27 @@ describe('Map Persistence', () => {
         await parchmentAssist._saveMapToStorage();
 
         expect(storageData['map_TestGame']).toBeDefined();
-        expect(storageData['map_TestGame']['Hall']).toBeDefined();
-        expect(storageData['map_TestGame']['Hall'].items).toEqual(['key']);
+        // Graph uses canonical (lowercase) keys
+        expect(storageData['map_TestGame'].graph['hall']).toBeDefined();
+        expect(storageData['map_TestGame'].graph['hall'].items).toEqual(['key']);
+        expect(storageData['map_TestGame'].traversed).toEqual([]);
+        expect(storageData['map_TestGame'].connectionMeta).toEqual({});
     });
 
     test('_loadMapFromStorage should restore map graph', async () => {
         storageData['map_Test'] = {
-            Dungeon: { items: ['sword'], exits: { up: 'Entrance' }, isDeleted: false },
+            graph: {
+                dungeon: {
+                    displayName: 'Dungeon',
+                    items: ['sword'],
+                    exits: { up: 'entrance' },
+                    isDeleted: false,
+                    status: 'visited',
+                    description: '',
+                },
+            },
+            traversed: [],
+            connectionMeta: {},
         };
         document.title = 'Test - Parchment';
 

@@ -14,6 +14,7 @@ function createUIManager(overrides = {}) {
     const onChoiceSubmit = overrides.onChoiceSubmit || jest.fn();
     const onRefresh = overrides.onRefresh || jest.fn();
     const onClearJournal = overrides.onClearJournal || jest.fn();
+    const onUndoAI = overrides.onUndoAI || jest.fn();
 
     const ui = new UIManager({
         npcProfiler,
@@ -22,8 +23,9 @@ function createUIManager(overrides = {}) {
         onChoiceSubmit,
         onRefresh,
         onClearJournal,
+        onUndoAI,
     });
-    return { ui, npcProfiler, mapManager, onCommandSubmit, onChoiceSubmit, onRefresh };
+    return { ui, npcProfiler, mapManager, onCommandSubmit, onChoiceSubmit, onRefresh, onUndoAI };
 }
 
 describe('UIManager', () => {
@@ -556,6 +558,119 @@ describe('UIManager', () => {
             const choicesSection = document.getElementById('palette-choices-section');
             expect(choicesSection).not.toBeNull();
             expect(choicesSection.style.display).toBe('block');
+        });
+    });
+
+    describe('showAILoadingIndicator', () => {
+        test('should create .ai-loading-indicator inside #interactables-section when true', () => {
+            const { ui } = createUIManager();
+            ui.createCommandPalette();
+
+            ui.showAILoadingIndicator(true);
+
+            const indicator = document.querySelector(
+                '#interactables-section .ai-loading-indicator'
+            );
+            expect(indicator).not.toBeNull();
+        });
+
+        test('should remove .ai-loading-indicator when false', () => {
+            const { ui } = createUIManager();
+            ui.createCommandPalette();
+
+            ui.showAILoadingIndicator(true);
+            ui.showAILoadingIndicator(false);
+
+            const indicator = document.querySelector('.ai-loading-indicator');
+            expect(indicator).toBeNull();
+        });
+
+        test('should not throw when commandPalette is null', () => {
+            const { ui } = createUIManager();
+            ui.commandPalette = null;
+            expect(() => ui.showAILoadingIndicator(true)).not.toThrow();
+        });
+    });
+
+    describe('showUndoAIButton / hideUndoAIButton', () => {
+        test('should create .undo-ai-btn inside #interactables-section', () => {
+            const { ui } = createUIManager();
+            ui.createCommandPalette();
+
+            ui.showUndoAIButton();
+
+            const btn = document.querySelector('#interactables-section .undo-ai-btn');
+            expect(btn).not.toBeNull();
+        });
+
+        test('calling showUndoAIButton twice should not duplicate the button', () => {
+            const { ui } = createUIManager();
+            ui.createCommandPalette();
+
+            ui.showUndoAIButton();
+            ui.showUndoAIButton();
+
+            const buttons = document.querySelectorAll('.undo-ai-btn');
+            expect(buttons.length).toBe(1);
+        });
+
+        test('hideUndoAIButton should remove the .undo-ai-btn element', () => {
+            const { ui } = createUIManager();
+            ui.createCommandPalette();
+
+            ui.showUndoAIButton();
+            ui.hideUndoAIButton();
+
+            const btn = document.querySelector('.undo-ai-btn');
+            expect(btn).toBeNull();
+        });
+
+        test('clicking the undo button should call the onUndoAI callback', () => {
+            const { ui, onUndoAI } = createUIManager();
+            ui.createCommandPalette();
+
+            ui.showUndoAIButton();
+            const btn = document.querySelector('.undo-ai-btn');
+            btn.click();
+
+            expect(onUndoAI).toHaveBeenCalledTimes(1);
+        });
+
+        test('hideUndoAIButton should not throw when commandPalette is null', () => {
+            const { ui } = createUIManager();
+            ui.commandPalette = null;
+            expect(() => ui.hideUndoAIButton()).not.toThrow();
+        });
+    });
+
+    describe('Keyboard shortcut targets', () => {
+        test('switchTab("map") activates the map tab', () => {
+            const { ui } = createUIManager();
+            ui.createCommandPalette();
+            ui.switchTab('map');
+            const mapBtn = document.querySelector('.tab-button[data-tab="map"]');
+            expect(mapBtn.classList.contains('active')).toBe(true);
+        });
+
+        test('toggleChoiceMode() flips choiceMode flag', async () => {
+            const { ui } = createUIManager();
+            expect(ui.choiceMode).toBe(false);
+            await ui.toggleChoiceMode();
+            expect(ui.choiceMode).toBe(true);
+            await ui.toggleChoiceMode();
+            expect(ui.choiceMode).toBe(false);
+        });
+
+        test('switchTab("map") and switchTab("main") navigate correctly', () => {
+            const { ui } = createUIManager();
+            ui.createCommandPalette();
+            ui.switchTab('map');
+            const mapBtn = document.querySelector('.tab-button[data-tab="map"]');
+            expect(mapBtn.classList.contains('active')).toBe(true);
+            ui.switchTab('main');
+            const mainBtn = document.querySelector('.tab-button[data-tab="main"]');
+            expect(mainBtn.classList.contains('active')).toBe(true);
+            expect(mapBtn.classList.contains('active')).toBe(false);
         });
     });
 });

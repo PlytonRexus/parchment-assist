@@ -1,7 +1,38 @@
 // Parchment-Assist Service Worker
 // Handles LLM requests to Ollama and Gemini APIs
 
+class RateLimiter {
+    constructor(maxTokens, refillPerMinute) {
+        this.maxTokens = maxTokens;
+        this.tokens = maxTokens;
+        this.refillPerMs = refillPerMinute / 60000;
+        this.lastRefill = Date.now();
+    }
+
+    consume() {
+        const now = Date.now();
+        this.tokens = Math.min(
+            this.maxTokens,
+            this.tokens + (now - this.lastRefill) * this.refillPerMs
+        );
+        this.lastRefill = now;
+        if (this.tokens < 1) {
+            return false;
+        }
+        this.tokens -= 1;
+        return true;
+    }
+}
+
 class LLMService {
+    static GEMINI_MODELS = [
+        'gemini-3.1-flash-lite-preview',
+        'gemini-3-flash-preview',
+        'gemini-2.5-flash',
+        'gemini-2.5-flash-lite',
+        'gemma-4-31b',
+    ];
+
     constructor() {
         this.cache = new Map();
         this.requestQueue = new Map();
@@ -9,10 +40,18 @@ class LLMService {
             preferLocal: true,
             ollamaModel: 'llama3',
             geminiKey: '',
+            geminiKeys: [],
             timeout: 15000,
             activeProviders: [],
         };
         this.settingsPromise = this.loadSettings();
+        this._ollamaRateLimiter = new RateLimiter(30, 30); // 30 req/min
+        this._geminiRateLimiter = new RateLimiter(10, 10); // 10 req/min
+        // Model fallback tracking
+        this._geminiModelIndex = 0;
+        this._geminiKeyIndex = 0;
+        this._geminiBackoff = 0; // exponential backoff exponent
+        this._geminiBackoffUntil = 0; // timestamp
     }
 
     async loadSettings() {
@@ -21,18 +60,76 @@ class LLMService {
                 'preferLocal',
                 'ollamaModel',
                 'geminiKey',
+                'geminiKeys',
                 'activeProviders',
             ]);
             this.settings = { ...this.settings, ...stored };
+            // Normalize geminiKeys: merge single key + multi-key list
+            if (!Array.isArray(this.settings.geminiKeys)) {
+                this.settings.geminiKeys = [];
+            }
+            if (
+                this.settings.geminiKey &&
+                !this.settings.geminiKeys.includes(this.settings.geminiKey)
+            ) {
+                this.settings.geminiKeys.unshift(this.settings.geminiKey);
+            }
+            this.settings.geminiKeys = this.settings.geminiKeys.filter((k) => k && k.trim());
         } catch (error) {
             console.error('Failed to load settings:', error);
         }
     }
 
-    generateCacheKey(gameState) {
+    _getGeminiKey() {
+        const keys = this.settings.geminiKeys;
+        if (!keys.length) {
+            return this.settings.geminiKey || '';
+        }
+        return keys[this._geminiKeyIndex % keys.length] || '';
+    }
+
+    _getGeminiModel() {
+        return LLMService.GEMINI_MODELS[this._geminiModelIndex % LLMService.GEMINI_MODELS.length];
+    }
+
+    _advanceGeminiOnRateLimit() {
+        const keys = this.settings.geminiKeys;
+        // Try next key first
+        if (keys.length > 1) {
+            const nextKeyIdx = (this._geminiKeyIndex + 1) % keys.length;
+            if (nextKeyIdx !== 0) {
+                this._geminiKeyIndex = nextKeyIdx;
+                console.log(`Rotating to Gemini key ${this._geminiKeyIndex + 1}/${keys.length}`);
+                return true;
+            }
+            this._geminiKeyIndex = 0;
+        }
+        // All keys exhausted for this model — try next model
+        const nextModelIdx = this._geminiModelIndex + 1;
+        if (nextModelIdx < LLMService.GEMINI_MODELS.length) {
+            this._geminiModelIndex = nextModelIdx;
+            this._geminiKeyIndex = 0;
+            console.log(`Falling back to model: ${this._getGeminiModel()}`);
+            return true;
+        }
+        // All models + keys exhausted — trigger backoff
+        this._geminiBackoff = Math.min(this._geminiBackoff + 1, 6); // cap at 2^6 = 64s
+        this._geminiBackoffUntil = Date.now() + Math.pow(2, this._geminiBackoff) * 1000;
+        console.log(
+            `All Gemini models exhausted, backing off ${Math.pow(2, this._geminiBackoff)}s`
+        );
+        return false;
+    }
+
+    _resetGeminiBackoff() {
+        this._geminiBackoff = 0;
+        this._geminiBackoffUntil = 0;
+    }
+
+    generateCacheKey(gameState, scopedText) {
         const key = JSON.stringify({
             location: gameState.location,
-            recentText: gameState.gameText.slice(-200), // Last 200 chars
+            recentText: scopedText ? scopedText.slice(-200) : gameState.gameText.slice(-200),
             commands: gameState.lastCommands,
         });
 
@@ -46,8 +143,8 @@ class LLMService {
         return hash.toString();
     }
 
-    async getSuggestions(gameState, force = false) {
-        const cacheKey = this.generateCacheKey(gameState);
+    async getSuggestions(gameState, force = false, { scopedText, heuristicHints } = {}) {
+        const cacheKey = this.generateCacheKey(gameState, scopedText);
         if (!force && this.cache.has(cacheKey)) {
             const cached = this.cache.get(cacheKey);
             if (Date.now() - cached.timestamp < 300000) {
@@ -62,7 +159,10 @@ class LLMService {
         const requestPromise = (async () => {
             try {
                 await this.settingsPromise;
-                const structuredState = await this.extractStructuredState(gameState);
+                const structuredState = await this.extractStructuredState(gameState, {
+                    scopedText,
+                    heuristicHints,
+                });
                 if (
                     structuredState &&
                     structuredState.quests &&
@@ -73,10 +173,14 @@ class LLMService {
                     await chrome.storage.local.set({ [storageKey]: structuredState.quests });
                 }
                 const response = { structuredState };
-                this.cache.set(cacheKey, { data: response, timestamp: Date.now() });
-                if (this.cache.size > 50) {
-                    const oldestKey = Array.from(this.cache.keys())[0];
-                    this.cache.delete(oldestKey);
+                // Only cache responses with substantive content; empty states
+                // (from provider failures) should not poison the cache.
+                if (structuredState.location) {
+                    this.cache.set(cacheKey, { data: response, timestamp: Date.now() });
+                    if (this.cache.size > 50) {
+                        const oldestKey = Array.from(this.cache.keys())[0];
+                        this.cache.delete(oldestKey);
+                    }
                 }
                 return response;
             } finally {
@@ -158,14 +262,23 @@ class LLMService {
         return null;
     }
 
-    _buildStatePrompt(gameState) {
+    _buildStatePrompt(gameState, { scopedText, heuristicHints } = {}) {
+        // Use scoped text (current room only) when available, with broader context as fallback
+        const primaryText = scopedText || gameState.gameText.slice(-5000);
+        const contextText = scopedText ? gameState.gameText.slice(-3000) : '';
+        const hintsSection =
+            Array.isArray(heuristicHints) && heuristicHints.length > 0
+                ? `\n**Candidate interactables (verify against text):** ${heuristicHints.join(', ')}\nConfirm which of these are real interactables. Correct types and add any the list missed.\n`
+                : '';
+
         return `You are a text-parsing AI. Extract structured information from the following interactive fiction game text.
 
 **Game:** ${gameState.gameTitle || 'Unknown'}
-**Raw Game Text:**
+**Current Room Text:**
 \`\`\`
-${gameState.gameText.slice(-100000)}
+${primaryText}
 \`\`\`
+${contextText ? `\n**Broader Context (earlier game text):**\n\`\`\`\n${contextText}\n\`\`\`\n` : ''}${hintsSection}
 
 **Your Task:**
 Analyze the text and return a JSON object with ALL of the following fields: "location", "inventory", "objects", "npcs", "exits", "verbs", "room_description", "quests", "suggestedActions", "npcProfiles", and "mapData".
@@ -190,12 +303,23 @@ Analyze the text and return a JSON object with ALL of the following fields: "loc
   },
   "mapData": {
     "roomName": "string",
-    "exits": [{"direction": "string", "room": "string"}]
+    "exits": [{"direction": "string", "room": "string"}],
+    "rooms": {
+      "roomName": {
+        "items": ["string"],
+        "description": "string (one sentence)",
+        "status": "visited | unvisited"
+      }
+    },
+    "connections": [
+      { "from": "string", "to": "string", "label": "string",
+        "accessible": true, "confirmed": true }
+    ]
   },
   "interactables": [
     {
       "name": "string",
-      "type": "object" | "npc" | "exit",
+      "type": "object" | "npc" | "exit" | "scenery",
       "actions": [
         {"command": "string", "label": "string", "confidence": 0.0}
       ]
@@ -206,28 +330,43 @@ Analyze the text and return a JSON object with ALL of the following fields: "loc
 **Instructions:**
 *   **Always** return a valid JSON object with all fields.
 *   If a field is not present, use an empty string "" or empty array [].
-*   **Objects:** For objects with adjectives (e.g., "rusty iron key"), also include the base noun ("key").
+*   **Objects:** List objects by their base noun (e.g., "key" not "rusty iron key"). Only include adjectives when needed to distinguish between multiple similar objects in the scene.
 *   **Verbs:** From the list below, select up to 10 verbs that are most relevant to the current game text.
     ["ATTACK", "ASK", "BUY", "CLIMB", "CLOSE", "CUT", "DIG", "DRINK", "DROP", "EAT", "ENTER", "EXAMINE", "FILL", "GIVE", "INVENTORY", "JUMP", "LISTEN", "LOOK", "MOVE", "OPEN", "PULL", "PUSH", "READ", "SEARCH", "SIT", "SLEEP", "SMELL", "STAND", "TAKE", "TALK TO", "THROW", "TIE", "TURN ON", "TURN OFF", "UNLOCK", "USE", "WAIT", "WEAR"]
 *   **Exits:** Return an array of objects, where each object has a "direction" and "room" property. If the room name is not mentioned, use "an unknown area".
-*   **Interactables:** For every object, NPC, and navigable exit in the scene, create an entry in "interactables". Each entry must have:
-    - **name:** The item/NPC/direction name (e.g., "rusty key", "old wizard", "north")
-    - **type:** One of "object", "npc", or "exit"
-    - **actions:** An array of 2-5 contextually appropriate parser commands for this specific interactable, sorted by confidence (highest first). Each action has:
-      - **command:** The full parser command (e.g., "take rusty key", "ask old wizard about the quest")
+*   **mapData.rooms:** Only include rooms that are DIRECTLY accessible from the current location (reachable in one move via an exit). Do NOT include distant locations mentioned in backstory, lore, or conversation. Each room must correspond to an exit. Visited rooms use status "visited", unvisited adjacent rooms use "unvisited". Provide a one-sentence description for each room.
+*   **mapData.connections:** The label MUST be a cardinal direction or simple movement word (north, south, east, west, up, down, in, out, enter, exit, northeast, northwest, southeast, southwest). Do NOT use phrases like "travel to", "across town", or "move to" as labels. Set accessible to false for blocked exits (locked doors, barriers). Set confirmed to false for exits that are inferred but not yet walked through.
+*   **Interactables — CRITICAL — be exhaustive:** Extract EVERY noun or noun-phrase in the scene text that could plausibly be interacted with or examined. This is the most important field. Miss nothing. Include:
+    - **Objects** (type "object"): takeable, useable, or examinable items — keys, lamps, coins, weapons, clothing, containers (chests, boxes, drawers, cabinets), doors, books, notes, signs, levers, buttons, switches
+    - **Scenery** (type "scenery"): fixed features of the room that can be examined but not taken — walls, windows, paintings, tapestries, fountains, fireplaces, altars, pedestals, plaques, inscriptions, floors, ceilings, sky, trees, rivers, statues
+    - **NPCs** (type "npc"): any person, creature, or entity that can be spoken to or interacted with — guards, merchants, wizards, trolls, ghosts, animals; include both named ("Gandalf") and generic ("the guard", "a troll")
+    - **Exits** (type "exit"): Named destinations the player can enter or go to (e.g., "office", "alley", "tower", "center of town"). Use the destination name, not the compass direction. Do NOT include bare cardinal directions (north, south, east, west, up, down, etc.) as exit interactables — players type those directly. Only include locations that have a name in the text.
+    - **Inventory items** (type "object"): if any inventory item is mentioned in the scene text, include it with drop/use/examine actions
+    - **name:** Use the shortest unambiguous noun from the game text. Only include adjectives when needed to distinguish between multiple similar things in the scene (e.g., "red key" vs "blue key"). If there is only one alley, use "alley" not "garbage-choked alley". Do NOT create separate entries for both the adjective phrase and the bare noun.
+    - **type:** One of "object", "npc", "exit", or "scenery"
+    - **actions:** An array of 2-6 contextually appropriate parser commands, sorted by confidence (highest first). Each action has:
+      - **command:** The parser command using the SHORTEST unambiguous noun. Only include adjectives when needed to distinguish between multiple similar things in the scene (e.g., "red key" vs "blue key"). If there is only one key, just use "key". If there is only one alley, use "alley", not "garbage-choked alley".
       - **label:** A short verb label (e.g., "Take", "Ask about quest")
       - **confidence:** A float 0.0–1.0 indicating how useful this action is given the current context
-    - Example: {"name": "rusty key", "type": "object", "actions": [{"command": "take rusty key", "label": "Take", "confidence": 0.95}, {"command": "examine rusty key", "label": "Examine", "confidence": 0.85}]}
+    - Example object: {"name": "rusty key", "type": "object", "actions": [{"command": "take key", "label": "Take", "confidence": 0.95}, {"command": "examine key", "label": "Examine", "confidence": 0.85}, {"command": "unlock door with key", "label": "Unlock door", "confidence": 0.75}]}
+    - Example scenery: {"name": "painting", "type": "scenery", "actions": [{"command": "examine painting", "label": "Examine", "confidence": 0.95}, {"command": "look behind painting", "label": "Look behind", "confidence": 0.6}]}
+    - Example NPC: {"name": "guard", "type": "npc", "actions": [{"command": "talk to guard", "label": "Talk", "confidence": 0.9}, {"command": "ask guard about key", "label": "Ask about key", "confidence": 0.8}, {"command": "examine guard", "label": "Examine", "confidence": 0.6}]}
     - Example exit: {"name": "north", "type": "exit", "actions": [{"command": "go north", "label": "Go north", "confidence": 0.90}]}
+    - Example named exit: {"name": "Tower", "type": "exit", "actions": [{"command": "go north", "label": "Go to Tower", "confidence": 0.90}]}
+    - **CRITICAL ANTI-HALLUCINATION RULE:** ONLY include entities whose name appears verbatim (or nearly verbatim) in the game text above. Do NOT invent, guess, or include entities based on genre conventions, the game title, or general knowledge. If the word "king" does not appear in the text, do not include "king". If "ring" does not appear, do not include "ring". Every interactable name must be traceable to a word or phrase actually present in the provided game text.
+    - **FILTERING RULE — do NOT include:**
+      - Ambient sounds, smells, or weather that cannot be examined (e.g., "train whistle" heard in the distance, "wind", "rain")
+      - The current room/location name itself (it is already displayed separately)
+      - Words used figuratively or abstractly (e.g., "passage" from "centuries' passage" means time, not a physical passage)
+      - Generic room descriptors that are synonyms for the current location (e.g., "cul-de-sac" when that IS the current room)
 *   **Suggested Actions**: This is CRITICAL for choice-based gameplay. Based on the current situation, suggest 4-6 highly plausible, contextual actions the player would realistically want to take next. These should be:
-    - Complete, actionable parser commands (e.g., "examine the rusty key", "ask guard about the prisoner", "unlock door with brass key")
+    - Complete, actionable parser commands using the shortest unambiguous noun (e.g., "examine key", "ask guard about prisoner", "unlock door with key"). Only add adjectives to disambiguate (e.g., "brass key" when there are multiple keys).
     - Directly relevant to the current scene, available objects, NPCs, and story context
     - Focused on story progression, puzzle-solving, or meaningful exploration
     - Varied in type (examining objects, talking to NPCs, using items, moving to significant locations)
     - Avoid generic actions like "look", "inventory", "help", "wait", or simple cardinal directions unless they're specifically relevant
     - Avoid overly obvious or redundant commands
-    - Use specific object names from the current context (prefer "examine brass key" over "examine key" if multiple keys exist)
-    Examples for a scene with a locked door and guard: ["ask guard about the locked door", "examine the door lock closely", "search guard for keys", "go back to entrance hall"]
+    Examples for a scene with a locked door and guard: ["ask guard about door", "examine lock", "search guard", "go back to entrance hall"]
 *   **Quests:** Extract any explicit or implicit objectives, goals, or tasks from the game text. Include:
     - Explicit goals mentioned directly: "Find the golden chalice" → {"description": "Find the golden chalice", "status": "active"}
     - Implicit tasks from obstacles: "The door is locked" → {"description": "Unlock the door", "status": "active"}
@@ -257,7 +396,7 @@ Analyze the text and return a JSON object with ALL of the following fields: "loc
             quests: [],
             suggestedActions: [],
             npcProfiles: {},
-            mapData: { roomName: '', exits: [] },
+            mapData: { roomName: '', exits: [], rooms: {}, connections: [] },
             interactables: [],
         };
     }
@@ -276,7 +415,7 @@ Analyze the text and return a JSON object with ALL of the following fields: "loc
                 (i) =>
                     i &&
                     typeof i.name === 'string' &&
-                    ['object', 'npc', 'exit'].includes(i.type) &&
+                    ['object', 'npc', 'exit', 'scenery'].includes(i.type) &&
                     Array.isArray(i.actions)
             )
             .map((i) => ({
@@ -331,6 +470,56 @@ Analyze the text and return a JSON object with ALL of the following fields: "loc
             validated.mapData.exits = validated.exits;
         }
 
+        // Normalize extended mapData fields (rooms, connections)
+        if (
+            !validated.mapData.rooms ||
+            typeof validated.mapData.rooms !== 'object' ||
+            Array.isArray(validated.mapData.rooms)
+        ) {
+            validated.mapData.rooms = {};
+        } else {
+            // Default per-room fields
+            for (const name in validated.mapData.rooms) {
+                const room = validated.mapData.rooms[name];
+                if (!room || typeof room !== 'object') {
+                    validated.mapData.rooms[name] = {
+                        items: [],
+                        description: '',
+                        status: 'visited',
+                    };
+                    continue;
+                }
+                if (!Array.isArray(room.items)) {
+                    room.items = [];
+                }
+                if (typeof room.description !== 'string') {
+                    room.description = '';
+                }
+                if (room.status !== 'visited' && room.status !== 'unvisited') {
+                    room.status = 'visited';
+                }
+            }
+        }
+        if (!Array.isArray(validated.mapData.connections)) {
+            validated.mapData.connections = [];
+        } else {
+            validated.mapData.connections = validated.mapData.connections
+                .filter(
+                    (c) =>
+                        c &&
+                        typeof c === 'object' &&
+                        typeof c.from === 'string' &&
+                        typeof c.to === 'string'
+                )
+                .map((c) => ({
+                    from: c.from,
+                    to: c.to,
+                    label: typeof c.label === 'string' ? c.label : '',
+                    accessible: c.accessible !== false,
+                    confirmed: c.confirmed !== false,
+                }));
+        }
+
         // Backward compat: derive old fields from interactables when those fields are empty
         if (interactables.length > 0) {
             if (!validated.objects.length) {
@@ -351,14 +540,18 @@ Analyze the text and return a JSON object with ALL of the following fields: "loc
         return validated;
     }
 
-    async extractStructuredState(gameState) {
-        const prompt = this._buildStatePrompt(gameState);
+    async extractStructuredState(gameState, { scopedText, heuristicHints } = {}) {
+        const prompt = this._buildStatePrompt(gameState, { scopedText, heuristicHints });
         const response = await this.callProviderForState(prompt);
         return this._validateAndNormalizeState(response);
     }
 
-    async extractStructuredStateStreaming(gameState, onProgress) {
-        const prompt = this._buildStatePrompt(gameState);
+    async extractStructuredStateStreaming(
+        gameState,
+        onProgress,
+        { scopedText, heuristicHints } = {}
+    ) {
+        const prompt = this._buildStatePrompt(gameState, { scopedText, heuristicHints });
 
         const onChunk = (accumulatedText) => {
             if (onProgress) {
@@ -366,13 +559,25 @@ Analyze the text and return a JSON object with ALL of the following fields: "loc
             }
         };
 
-        const fullText = await this.callProviderForStateStreaming(prompt, onChunk);
-        if (fullText) {
-            const parsed = this.parseStateResponse(fullText);
-            return this._validateAndNormalizeState(parsed);
+        try {
+            const fullText = await this.callProviderForStateStreaming(prompt, onChunk);
+            if (fullText) {
+                const parsed = this.parseStateResponse(fullText);
+                return this._validateAndNormalizeState(parsed);
+            }
+        } catch (error) {
+            // If 429 or rate-limited, don't retry with non-streaming — same API, same limit
+            if (
+                error.message.includes('429') ||
+                error.message.includes('Rate limited') ||
+                error.message.includes('backoff')
+            ) {
+                console.log('Streaming failed with rate limit, skipping non-streaming fallback');
+                return this._validateAndNormalizeState(null);
+            }
         }
 
-        // Streaming unavailable or all providers failed — fall back to non-streaming
+        // Only fall back for non-rate-limit failures (provider returned null, timeout, etc.)
         const response = await this.callProviderForState(prompt);
         return this._validateAndNormalizeState(response);
     }
@@ -528,6 +733,9 @@ Return ONLY a JSON array, no other text:
     }
 
     async tryOllama(prompt, responseParser, maxTokens = 500) {
+        if (!this._ollamaRateLimiter.consume()) {
+            throw new Error('Rate limited: Ollama (30 req/min exceeded)');
+        }
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), this.settings.timeout);
 
@@ -628,66 +836,117 @@ Return ONLY a JSON array, no other text:
     }
 
     async tryGemini(prompt, responseParser, maxTokens = 50000) {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), this.settings.timeout);
-
-        try {
-            const response = await fetch(
-                'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent',
-                {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'x-goog-api-key': this.settings.geminiKey,
-                    },
-                    body: JSON.stringify({
-                        contents: [
-                            {
-                                parts: [
-                                    {
-                                        text: prompt,
-                                    },
-                                ],
-                            },
-                        ],
-                        generationConfig: {
-                            temperature: 0.7,
-                            topP: 0.9,
-                            maxOutputTokens: maxTokens,
-                            stopSequences: [],
-                        },
-                    }),
-                    signal: controller.signal,
-                }
-            );
-
-            if (!response.ok) {
-                throw new Error(`Gemini API error: ${response.status}`);
-            }
-
-            const data = await response.json();
-            const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-            const parser = responseParser || this.parseResponse.bind(this);
-            // Removed: console.log('Gemini response:', text);
-            // Security: Don't log API responses that may contain user data
-            return parser(text);
-        } finally {
-            clearTimeout(timeoutId);
+        if (!this._geminiRateLimiter.consume()) {
+            throw new Error('Rate limited: Gemini (10 req/min exceeded)');
         }
+        if (Date.now() < this._geminiBackoffUntil) {
+            throw new Error('Gemini in backoff');
+        }
+
+        const startModelIdx = this._geminiModelIndex;
+        const startKeyIdx = this._geminiKeyIndex;
+
+        // Try current model/key, advance on 429
+        for (
+            let attempt = 0;
+            attempt <
+            LLMService.GEMINI_MODELS.length * Math.max(1, this.settings.geminiKeys.length);
+            attempt++
+        ) {
+            const model = this._getGeminiModel();
+            const apiKey = this._getGeminiKey();
+            if (!apiKey) {
+                throw new Error('No Gemini API key configured');
+            }
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), this.settings.timeout);
+
+            try {
+                const response = await fetch(
+                    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
+                    {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'x-goog-api-key': apiKey,
+                        },
+                        body: JSON.stringify({
+                            contents: [{ parts: [{ text: prompt }] }],
+                            generationConfig: {
+                                temperature: 0.7,
+                                topP: 0.9,
+                                maxOutputTokens: maxTokens,
+                                stopSequences: [],
+                            },
+                        }),
+                        signal: controller.signal,
+                    }
+                );
+
+                if (response.status === 429) {
+                    clearTimeout(timeoutId);
+                    console.log(`Gemini 429 on model ${model} key ${this._geminiKeyIndex + 1}`);
+                    if (!this._advanceGeminiOnRateLimit()) {
+                        throw new Error('Gemini API error: 429 (all models/keys exhausted)');
+                    }
+                    continue;
+                }
+
+                if (!response.ok) {
+                    clearTimeout(timeoutId);
+                    throw new Error(`Gemini API error: ${response.status}`);
+                }
+
+                this._resetGeminiBackoff();
+                const data = await response.json();
+                const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+                const parser = responseParser || this.parseResponse.bind(this);
+                return parser(text);
+            } catch (error) {
+                clearTimeout(timeoutId);
+                if (error.message.includes('429') && error.message.includes('all models')) {
+                    throw error;
+                }
+                if (error.message.includes('429')) {
+                    if (!this._advanceGeminiOnRateLimit()) {
+                        throw new Error('Gemini API error: 429 (all models/keys exhausted)');
+                    }
+                    continue;
+                }
+                throw error;
+            }
+        }
+        // Restore indices if we exhausted all attempts without success
+        this._geminiModelIndex = startModelIdx;
+        this._geminiKeyIndex = startKeyIdx;
+        throw new Error('Gemini API error: 429 (all attempts failed)');
     }
 
     async tryGeminiStreaming(prompt, onChunk, maxTokens = 50000) {
+        if (!this._geminiRateLimiter.consume()) {
+            throw new Error('Rate limited: Gemini (10 req/min exceeded)');
+        }
+        if (Date.now() < this._geminiBackoffUntil) {
+            throw new Error('Gemini in backoff');
+        }
+
+        const model = this._getGeminiModel();
+        const apiKey = this._getGeminiKey();
+        if (!apiKey) {
+            throw new Error('No Gemini API key configured');
+        }
+
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), this.settings.timeout);
 
         try {
             const response = await fetch(
-                'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:streamGenerateContent?alt=sse',
+                `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse`,
                 {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
-                        'x-goog-api-key': this.settings.geminiKey,
+                        'x-goog-api-key': apiKey,
                     },
                     body: JSON.stringify({
                         contents: [{ parts: [{ text: prompt }] }],
@@ -701,10 +960,19 @@ Return ONLY a JSON array, no other text:
                 }
             );
 
+            if (response.status === 429) {
+                console.log(
+                    `Gemini streaming 429 on model ${model} key ${this._geminiKeyIndex + 1}`
+                );
+                this._advanceGeminiOnRateLimit();
+                throw new Error('Gemini streaming API error: 429');
+            }
+
             if (!response.ok) {
                 throw new Error(`Gemini streaming API error: ${response.status}`);
             }
 
+            this._resetGeminiBackoff();
             const reader = response.body.getReader();
             const decoder = new TextDecoder();
             let accumulated = '';
@@ -783,7 +1051,7 @@ Return ONLY a JSON array, no other text:
 }
 
 // Export for testing
-export { LLMService };
+export { LLMService, RateLimiter };
 
 // Initialize service for browser environment
 if (typeof chrome !== 'undefined' && chrome.runtime) {
@@ -792,7 +1060,10 @@ if (typeof chrome !== 'undefined' && chrome.runtime) {
     chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         if (request.action === 'getSuggestions') {
             llmService
-                .getSuggestions(request.gameState, request.force)
+                .getSuggestions(request.gameState, request.force, {
+                    scopedText: request.scopedText,
+                    heuristicHints: request.heuristicHints,
+                })
                 .then((response) => {
                     sendResponse({
                         success: true,
@@ -853,12 +1124,12 @@ if (typeof chrome !== 'undefined' && chrome.runtime) {
                 return;
             }
 
-            const { gameState, force } = request;
+            const { gameState, force, scopedText, heuristicHints } = request;
 
             try {
                 await llmService.settingsPromise;
 
-                const cacheKey = llmService.generateCacheKey(gameState);
+                const cacheKey = llmService.generateCacheKey(gameState, scopedText);
                 if (!force && llmService.cache.has(cacheKey)) {
                     const cached = llmService.cache.get(cacheKey);
                     if (Date.now() - cached.timestamp < 300000) {
@@ -880,7 +1151,8 @@ if (typeof chrome !== 'undefined' && chrome.runtime) {
 
                 const structuredState = await llmService.extractStructuredStateStreaming(
                     gameState,
-                    onProgress
+                    onProgress,
+                    { scopedText, heuristicHints }
                 );
 
                 if (structuredState.quests && chrome.storage) {
@@ -890,10 +1162,12 @@ if (typeof chrome !== 'undefined' && chrome.runtime) {
                 }
 
                 const response = { structuredState };
-                llmService.cache.set(cacheKey, { data: response, timestamp: Date.now() });
-                if (llmService.cache.size > 50) {
-                    const oldestKey = Array.from(llmService.cache.keys())[0];
-                    llmService.cache.delete(oldestKey);
+                if (structuredState.location) {
+                    llmService.cache.set(cacheKey, { data: response, timestamp: Date.now() });
+                    if (llmService.cache.size > 50) {
+                        const oldestKey = Array.from(llmService.cache.keys())[0];
+                        llmService.cache.delete(oldestKey);
+                    }
                 }
 
                 port.postMessage({ type: 'done', structuredState });

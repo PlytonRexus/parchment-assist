@@ -101,11 +101,59 @@
         transform: translateY(-1px);
       }
 
+      .btn.enabled {
+        background: rgba(46, 204, 113, 0.3);
+        border-color: rgba(46, 204, 113, 0.6);
+        cursor: default;
+      }
+
+      .btn.enabled:hover {
+        background: rgba(46, 204, 113, 0.3);
+        transform: none;
+      }
+
       .footer {
         text-align: center;
         margin-top: 15px;
         font-size: 11px;
         opacity: 0.8;
+      }
+
+      .saves-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 8px;
+      }
+
+      .save-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 4px;
+      }
+
+      .save-name {
+        font-size: 12px;
+        text-overflow: ellipsis;
+        overflow: hidden;
+        max-width: 160px;
+        white-space: nowrap;
+      }
+
+      .save-action-btn {
+        background: rgba(255, 255, 255, 0.15);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        color: white;
+        padding: 2px 6px;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 11px;
+        margin-left: 4px;
+      }
+
+      .save-action-btn:hover {
+        background: rgba(255, 255, 255, 0.3);
       }
     </style>
   </head>
@@ -145,16 +193,25 @@
       </div>
     </div>
 
+    <div class="status" id="savesSection" style="display: none">
+      <div class="saves-header">
+        <span class="status-label">Save Slots</span>
+        <button class="btn save-btn" id="saveStateBtn">📸 Save</button>
+      </div>
+      <div id="savesList"></div>
+    </div>
+
     <div class="actions">
       <button class="btn" id="openOptions">⚙️ Settings</button>
       <button class="btn" id="testConnection">🧪 Test</button>
       <button class="btn" id="manualSuggest">💡 Suggest</button>
+      <button class="btn" id="enablePage">▶ Enable Here</button>
     </div>
 
     <div class="footer">
       <p>v1.0.0 • Click on IF games to activate</p>
     </div>
 
-    <script src="popup.js"></script>
+    <script type="module" src="popup.js"></script>
   </body>
 </html>

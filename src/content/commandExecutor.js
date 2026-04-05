@@ -1,7 +1,8 @@
 class CommandExecutor {
-    constructor({ findInputField, onError }) {
+    constructor({ findInputField, onError, submitAction }) {
         this.findInputField = findInputField;
         this.onError = onError || (() => {});
+        this.submitAction = submitAction || null;
     }
 
     submitCommand(command) {
@@ -10,17 +11,21 @@ class CommandExecutor {
             this.onError('Could not find input field');
             return false;
         }
-        inputField.value = command;
-        inputField.focus();
-        const enterEvent = new KeyboardEvent('keydown', {
-            key: 'Enter',
-            code: 'Enter',
-            keyCode: 13,
-            which: 13,
-            bubbles: true,
-            cancelable: true,
-        });
-        inputField.dispatchEvent(enterEvent);
+        if (this.submitAction) {
+            this.submitAction(command, inputField);
+        } else {
+            inputField.value = command;
+            inputField.focus();
+            const enterEvent = new KeyboardEvent('keydown', {
+                key: 'Enter',
+                code: 'Enter',
+                keyCode: 13,
+                which: 13,
+                bubbles: true,
+                cancelable: true,
+            });
+            inputField.dispatchEvent(enterEvent);
+        }
         return true;
     }
 

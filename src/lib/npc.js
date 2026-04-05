@@ -24,9 +24,14 @@ class NpcProfiler {
     _deepMerge(target, source) {
         for (const key of Object.keys(source)) {
             if (Array.isArray(source[key]) && Array.isArray(target[key])) {
-                // Append unique items from source array
                 for (const item of source[key]) {
-                    if (!target[key].includes(item)) {
+                    const norm = typeof item === 'string' ? item.trim().toLowerCase() : null;
+                    const isDuplicate = target[key].some((existing) =>
+                        norm !== null && typeof existing === 'string'
+                            ? existing.trim().toLowerCase() === norm
+                            : existing === item
+                    );
+                    if (!isDuplicate) {
                         target[key].push(item);
                     }
                 }
@@ -45,6 +50,18 @@ class NpcProfiler {
 
     getAllProfiles() {
         return this.npcProfiles;
+    }
+
+    static dedupStrings(arr) {
+        const seen = new Set();
+        return arr.filter((item) => {
+            const key = typeof item === 'string' ? item.trim().toLowerCase() : JSON.stringify(item);
+            if (seen.has(key)) {
+                return false;
+            }
+            seen.add(key);
+            return true;
+        });
     }
 }
 

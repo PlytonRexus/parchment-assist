@@ -9,6 +9,7 @@ class UIManager {
         onRefresh,
         onClearJournal,
         onGetHint,
+        onUndoAI,
     }) {
         this.npcProfiler = npcProfiler;
         this.mapManager = mapManager;
@@ -17,6 +18,7 @@ class UIManager {
         this.onRefresh = onRefresh || (() => {});
         this.onClearJournal = onClearJournal || (() => {});
         this.onGetHint = onGetHint || (() => {});
+        this.onUndoAI = onUndoAI || (() => {});
 
         this.commandPalette = null;
         this.bubble = null;
@@ -52,7 +54,6 @@ class UIManager {
             <div class="palette-tabs" role="tablist" aria-label="Command palette tabs">
                 <button class="tab-button active" data-tab="main" role="tab" aria-selected="true" aria-controls="palette-content">Main</button>
                 <button class="tab-button" data-tab="map" role="tab" aria-selected="false" aria-controls="map-tab-content">Map</button>
-                <button class="tab-button" data-tab="actions" role="tab" aria-selected="false" aria-controls="actions-tab-content">Actions</button>
                 <button class="tab-button" data-tab="profiles" role="tab" aria-selected="false" aria-controls="profiles-tab-content">Profiles</button>
             </div>
             <div class="palette-header">
@@ -104,9 +105,6 @@ class UIManager {
                 </div>
                 <div id="map-visual-container"></div>
                 <div id="room-list" role="list" aria-label="Discovered rooms" style="display: none;"></div>
-            </div>
-            <div id="actions-tab-content" class="tab-content" role="tabpanel" aria-labelledby="actions-tab" style="display: none;">
-                <div id="palette-actions" class="palette-list" role="group" aria-label="Suggested actions"></div>
             </div>
             <div id="profiles-tab-content" class="tab-content" role="tabpanel" aria-labelledby="profiles-tab" style="display: none; padding: 10px;">
                 <div id="palette-profiles" class="profiles-grid" role="list" aria-label="NPC Profiles"></div>
@@ -649,11 +647,6 @@ class UIManager {
         }
 
         this.renderJournal(content.querySelector('#palette-journal'), state.quests || []);
-        this.renderList(
-            this.commandPalette.querySelector('#palette-actions'),
-            state.suggestedActions || [],
-            'action'
-        );
     }
 
     renderInteractables(container, interactables) {
@@ -954,6 +947,59 @@ class UIManager {
         const loadingText = this.commandPalette.querySelector('.loading-text');
         if (loadingText) {
             loadingText.textContent = text;
+        }
+    }
+
+    showAILoadingIndicator(visible) {
+        if (!this.commandPalette) {
+            return;
+        }
+        const existing = this.commandPalette.querySelector('.ai-loading-indicator');
+        if (visible) {
+            if (!existing) {
+                const indicator = document.createElement('div');
+                indicator.className = 'ai-loading-indicator';
+                indicator.innerHTML =
+                    '<div class="loading-spinner ai-spinner"></div><span>AI analyzing\u2026</span>';
+                const interactablesSection =
+                    this.commandPalette.querySelector('#interactables-section');
+                if (interactablesSection) {
+                    interactablesSection.appendChild(indicator);
+                }
+            }
+        } else if (existing) {
+            existing.remove();
+        }
+    }
+
+    showUndoAIButton() {
+        if (!this.commandPalette) {
+            return;
+        }
+        if (this.commandPalette.querySelector('.undo-ai-btn')) {
+            return;
+        }
+        const btn = document.createElement('button');
+        btn.className = 'undo-ai-btn';
+        btn.textContent = '\u21a9 Undo AI';
+        btn.setAttribute('aria-label', 'Revert to heuristic-only results');
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.onUndoAI();
+        });
+        const interactablesSection = this.commandPalette.querySelector('#interactables-section');
+        if (interactablesSection) {
+            interactablesSection.appendChild(btn);
+        }
+    }
+
+    hideUndoAIButton() {
+        if (!this.commandPalette) {
+            return;
+        }
+        const btn = this.commandPalette.querySelector('.undo-ai-btn');
+        if (btn) {
+            btn.remove();
         }
     }
 
@@ -1299,7 +1345,6 @@ class UIManager {
 
         const mainContent = palette.querySelector('.palette-content');
         const mapContent = palette.querySelector('#map-tab-content');
-        const actionsContent = palette.querySelector('#actions-tab-content');
         const profilesContent = palette.querySelector('#profiles-tab-content');
 
         if (mainContent) {
@@ -1307,9 +1352,6 @@ class UIManager {
         }
         if (mapContent) {
             mapContent.style.display = 'none';
-        }
-        if (actionsContent) {
-            actionsContent.style.display = 'none';
         }
         if (profilesContent) {
             profilesContent.style.display = 'none';
@@ -1320,10 +1362,6 @@ class UIManager {
                 mapContent.style.display = 'block';
             }
             this.renderMap();
-        } else if (tabName === 'actions') {
-            if (actionsContent) {
-                actionsContent.style.display = 'block';
-            }
         } else if (tabName === 'profiles') {
             if (profilesContent) {
                 profilesContent.style.display = 'block';
@@ -1375,7 +1413,34 @@ class UIManager {
                             <h3>Three Tabs</h3>
                             <p><strong>Main:</strong> Game info, objects, NPCs<br>
                                <strong>Map:</strong> Discovered rooms and connections<br>
-                               <strong>Actions:</strong> AI-suggested commands</p>
+                               <strong>Actions:</strong> Clickable commands and hints</p>
+                        </div>
+                    </div>
+
+                    <div class="onboarding-feature">
+                        <div class="feature-icon">🖱️</div>
+                        <div class="feature-content">
+                            <h3>Clickable Items</h3>
+                            <p>The <strong>Actions</strong> tab lists objects, NPCs, and exits with context-aware buttons.
+                               Click any action to execute it — no typing required.</p>
+                        </div>
+                    </div>
+
+                    <div class="onboarding-feature">
+                        <div class="feature-icon">✨</div>
+                        <div class="feature-content">
+                            <h3>Interactive Game Text</h3>
+                            <p>Nouns in the game output are <strong>highlighted</strong>. Hover to see available actions;
+                               click to execute. The parser becomes invisible.</p>
+                        </div>
+                    </div>
+
+                    <div class="onboarding-feature">
+                        <div class="feature-icon">💡</div>
+                        <div class="feature-content">
+                            <h3>Hints</h3>
+                            <p>Stuck? Click the <strong>💡</strong> button in the Actions tab for AI-powered escalating hints.
+                               The extension also nudges you proactively when you've been in the same room for a while.</p>
                         </div>
                     </div>
 
@@ -1385,7 +1450,10 @@ class UIManager {
                             <h3>Keyboard Shortcuts</h3>
                             <p><strong>Alt+1-9:</strong> Quick-execute suggestions<br>
                                <strong>Alt+0:</strong> Toggle palette<br>
-                               <strong>Alt+R:</strong> Refresh suggestions</p>
+                               <strong>Alt+R:</strong> Refresh suggestions<br>
+                               <strong>Alt+H:</strong> Get a hint<br>
+                               <strong>Alt+M:</strong> Jump to map tab<br>
+                               <strong>Alt+C:</strong> Toggle choice mode</p>
                         </div>
                     </div>
                 </div>

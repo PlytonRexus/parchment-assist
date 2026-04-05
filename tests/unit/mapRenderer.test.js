@@ -1,5 +1,5 @@
 import { jest } from '@jest/globals';
-import { ForceLayout, SVGMapRenderer } from '../../src/ui/mapRenderer.js';
+import { ForceLayout, DirectionalLayout, SVGMapRenderer } from '../../src/ui/mapRenderer.js';
 
 // ── ForceLayout ──────────────────────────────────────────────────────────────
 
@@ -452,6 +452,204 @@ describe('SVGMapRenderer', () => {
             renderer.destroy();
         });
     });
+
+    describe('Map intelligence visuals', () => {
+        test('unvisited room node gets map-node-unvisited class', () => {
+            const renderer = new SVGMapRenderer(container);
+            const mapData = {
+                rooms: {
+                    Hall: { items: [], exits: {}, status: 'visited' },
+                    Vault: { items: [], exits: {}, status: 'unvisited' },
+                },
+                connections: [],
+            };
+            renderer.render(mapData, 'Hall');
+
+            const vaultNode = container.querySelector('[data-room="Vault"]');
+            expect(vaultNode.classList.contains('map-node-unvisited')).toBe(true);
+
+            const hallNode = container.querySelector('[data-room="Hall"]');
+            expect(hallNode.classList.contains('map-node-unvisited')).toBe(false);
+
+            renderer.destroy();
+        });
+
+        test('inaccessible edge gets map-edge-inaccessible class', () => {
+            const renderer = new SVGMapRenderer(container);
+            const mapData = {
+                rooms: {
+                    Hall: { items: [], exits: { north: 'Vault' } },
+                    Vault: { items: [], exits: {} },
+                },
+                connections: [
+                    {
+                        from: 'Hall',
+                        to: 'Vault',
+                        label: 'north',
+                        accessible: false,
+                        confirmed: true,
+                    },
+                ],
+            };
+            renderer.render(mapData, 'Hall');
+
+            const inaccessible = container.querySelector('.map-edge-inaccessible');
+            expect(inaccessible).not.toBeNull();
+
+            renderer.destroy();
+        });
+
+        test('inaccessible edge label includes lock symbol', () => {
+            const renderer = new SVGMapRenderer(container);
+            const mapData = {
+                rooms: {
+                    Hall: { items: [], exits: { north: 'Vault' } },
+                    Vault: { items: [], exits: {} },
+                },
+                connections: [
+                    {
+                        from: 'Hall',
+                        to: 'Vault',
+                        label: 'north',
+                        accessible: false,
+                    },
+                ],
+            };
+            renderer.render(mapData, 'Hall');
+
+            const labels = container.querySelectorAll('.map-edge-label');
+            const lockLabel = Array.from(labels).find((l) =>
+                l.textContent.includes('\uD83D\uDD12')
+            );
+            expect(lockLabel).toBeDefined();
+
+            renderer.destroy();
+        });
+
+        test('unconfirmed edge gets map-edge-unconfirmed class and no arrowhead', () => {
+            const renderer = new SVGMapRenderer(container);
+            const mapData = {
+                rooms: {
+                    Hall: { items: [], exits: { east: 'Garden' } },
+                    Garden: { items: [], exits: {} },
+                },
+                connections: [
+                    {
+                        from: 'Hall',
+                        to: 'Garden',
+                        label: 'east',
+                        confirmed: false,
+                    },
+                ],
+            };
+            renderer.render(mapData, 'Hall');
+
+            const unconfirmed = container.querySelector('.map-edge-unconfirmed');
+            expect(unconfirmed).not.toBeNull();
+            expect(unconfirmed.getAttribute('marker-end')).toBeNull();
+
+            renderer.destroy();
+        });
+
+        test('unconfirmed edge label has ? suffix', () => {
+            const renderer = new SVGMapRenderer(container);
+            const mapData = {
+                rooms: {
+                    Hall: { items: [], exits: { east: 'Garden' } },
+                    Garden: { items: [], exits: {} },
+                },
+                connections: [
+                    {
+                        from: 'Hall',
+                        to: 'Garden',
+                        label: 'east',
+                        confirmed: false,
+                    },
+                ],
+            };
+            renderer.render(mapData, 'Hall');
+
+            const labels = container.querySelectorAll('.map-edge-label');
+            const questionLabel = Array.from(labels).find((l) => l.textContent.includes('E?'));
+            expect(questionLabel).toBeDefined();
+
+            renderer.destroy();
+        });
+
+        test('tooltip shows description text', () => {
+            const renderer = new SVGMapRenderer(container);
+            const mapData = {
+                rooms: {
+                    Hall: {
+                        items: [],
+                        exits: {},
+                        description: 'A grand stone hall lit by torches.',
+                    },
+                },
+                connections: [],
+            };
+            renderer.render(mapData, 'Hall');
+
+            // Click the node to show tooltip
+            const node = container.querySelector('[data-room="Hall"]');
+            node.dispatchEvent(new Event('click', { bubbles: true }));
+
+            const desc = container.querySelector('.map-tooltip-description');
+            expect(desc).not.toBeNull();
+            expect(desc.textContent).toBe('A grand stone hall lit by torches.');
+
+            renderer.destroy();
+        });
+
+        test('tooltip shows Not yet visited badge for unvisited rooms', () => {
+            const renderer = new SVGMapRenderer(container);
+            const mapData = {
+                rooms: {
+                    Vault: {
+                        items: [],
+                        exits: {},
+                        status: 'unvisited',
+                        description: 'A locked vault.',
+                    },
+                },
+                connections: [],
+            };
+            renderer.render(mapData, null);
+
+            const node = container.querySelector('[data-room="Vault"]');
+            node.dispatchEvent(new Event('click', { bubbles: true }));
+
+            const badge = container.querySelector('.map-tooltip-unvisited-badge');
+            expect(badge).not.toBeNull();
+            expect(badge.textContent).toBe('Not yet visited');
+
+            renderer.destroy();
+        });
+
+        test('tooltip truncates long descriptions to 120 chars', () => {
+            const longDesc = 'A'.repeat(200);
+            const renderer = new SVGMapRenderer(container);
+            const mapData = {
+                rooms: {
+                    Hall: {
+                        items: [],
+                        exits: {},
+                        description: longDesc,
+                    },
+                },
+                connections: [],
+            };
+            renderer.render(mapData, 'Hall');
+
+            const node = container.querySelector('[data-room="Hall"]');
+            node.dispatchEvent(new Event('click', { bubbles: true }));
+
+            const desc = container.querySelector('.map-tooltip-description');
+            expect(desc.textContent.length).toBeLessThanOrEqual(123); // 120 + '...'
+
+            renderer.destroy();
+        });
+    });
 });
 
 // ── ForceLayout directional bias ─────────────────────────────────────────────
@@ -517,5 +715,182 @@ describe('ForceLayout directional bias', () => {
         // Both should produce same result since 'up' has no vector
         expect(posA.A.x).toBeCloseTo(posB.A.x, 0);
         expect(posA.A.y).toBeCloseTo(posB.A.y, 0);
+    });
+});
+
+// ── DirectionalLayout ───────────────────────────────────────────────────────
+
+describe('DirectionalLayout', () => {
+    test('north room placed above root (lower y)', () => {
+        const conns = [{ from: 'Hall', to: 'Garden', label: 'north' }];
+        const layout = new DirectionalLayout(conns);
+        const pos = layout.run('Hall', ['Hall', 'Garden']);
+        expect(pos.Garden.y).toBeLessThan(pos.Hall.y);
+    });
+
+    test('east room placed right of root (higher x)', () => {
+        const conns = [{ from: 'Hall', to: 'Kitchen', label: 'east' }];
+        const layout = new DirectionalLayout(conns);
+        const pos = layout.run('Hall', ['Hall', 'Kitchen']);
+        expect(pos.Kitchen.x).toBeGreaterThan(pos.Hall.x);
+    });
+
+    test('south room below, west room left', () => {
+        const conns = [
+            { from: 'Hall', to: 'Cellar', label: 'south' },
+            { from: 'Hall', to: 'Parlor', label: 'west' },
+        ];
+        const layout = new DirectionalLayout(conns);
+        const pos = layout.run('Hall', ['Hall', 'Cellar', 'Parlor']);
+        expect(pos.Cellar.y).toBeGreaterThan(pos.Hall.y);
+        expect(pos.Parlor.x).toBeLessThan(pos.Hall.x);
+    });
+
+    test('diagonal NE: lower y AND higher x than root', () => {
+        const conns = [{ from: 'Hall', to: 'Tower', label: 'northeast' }];
+        const layout = new DirectionalLayout(conns);
+        const pos = layout.run('Hall', ['Hall', 'Tower']);
+        expect(pos.Tower.y).toBeLessThan(pos.Hall.y);
+        expect(pos.Tower.x).toBeGreaterThan(pos.Hall.x);
+    });
+
+    test('up/down: same x/y base, different floor value', () => {
+        const conns = [
+            { from: 'Hall', to: 'Attic', label: 'up' },
+            { from: 'Hall', to: 'Basement', label: 'down' },
+        ];
+        const layout = new DirectionalLayout(conns);
+        const pos = layout.run('Hall', ['Hall', 'Attic', 'Basement']);
+        expect(pos.Attic.floor).toBe(1);
+        expect(pos.Basement.floor).toBe(-1);
+        expect(pos.Hall.floor).toBe(0);
+    });
+
+    test('conflict resolution: two rooms both north get different cells', () => {
+        const conns = [
+            { from: 'Hall', to: 'Room A', label: 'north' },
+            { from: 'Hall', to: 'Room B', label: 'north' },
+        ];
+        const layout = new DirectionalLayout(conns);
+        const pos = layout.run('Hall', ['Hall', 'Room A', 'Room B']);
+        // Both should be above Hall
+        expect(pos['Room A'].y).toBeLessThan(pos.Hall.y);
+        expect(pos['Room B'].y).toBeLessThan(pos.Hall.y);
+        // Second nudged further north (lower y)
+        expect(pos['Room B'].y).toBeLessThan(pos['Room A'].y);
+    });
+
+    test('disconnected subgraph: all rooms get finite positions, no overlap', () => {
+        const conns = [
+            { from: 'A', to: 'B', label: 'north' },
+            { from: 'C', to: 'D', label: 'east' },
+        ];
+        const layout = new DirectionalLayout(conns);
+        const pos = layout.run('A', ['A', 'B', 'C', 'D']);
+        // All rooms placed
+        expect(Object.keys(pos)).toHaveLength(4);
+        for (const name of ['A', 'B', 'C', 'D']) {
+            expect(Number.isFinite(pos[name].x)).toBe(true);
+            expect(Number.isFinite(pos[name].y)).toBe(true);
+        }
+        // Disconnected component below main graph
+        expect(pos.C.y).toBeGreaterThan(pos.A.y);
+    });
+
+    test('single room at origin, empty input returns {}', () => {
+        const layout = new DirectionalLayout([]);
+        const single = layout.run('Hall', ['Hall']);
+        expect(single.Hall.x).toBe(0);
+        expect(single.Hall.y).toBe(0);
+
+        const empty = layout.run(null, []);
+        expect(empty).toEqual({});
+    });
+
+    test('deterministic: same input produces same output', () => {
+        const conns = [
+            { from: 'Hall', to: 'Garden', label: 'north' },
+            { from: 'Hall', to: 'Kitchen', label: 'east' },
+            { from: 'Garden', to: 'Shed', label: 'west' },
+        ];
+        const rooms = ['Hall', 'Garden', 'Kitchen', 'Shed'];
+        const layout1 = new DirectionalLayout(conns);
+        const layout2 = new DirectionalLayout(conns);
+        const pos1 = layout1.run('Hall', rooms);
+        const pos2 = layout2.run('Hall', rooms);
+        for (const name of rooms) {
+            expect(pos1[name].x).toBe(pos2[name].x);
+            expect(pos1[name].y).toBe(pos2[name].y);
+            expect(pos1[name].floor).toBe(pos2[name].floor);
+        }
+    });
+});
+
+// ── SVGMapRenderer RAF throttling ─────────────────────────────────────────────
+
+describe('SVGMapRenderer RAF throttling', () => {
+    let container;
+    let rafCallbacks;
+    let originalRAF;
+    let originalCAF;
+
+    beforeEach(() => {
+        container = document.createElement('div');
+        document.body.appendChild(container);
+
+        rafCallbacks = [];
+        originalRAF = globalThis.requestAnimationFrame;
+        originalCAF = globalThis.cancelAnimationFrame;
+
+        globalThis.requestAnimationFrame = jest.fn((cb) => {
+            const id = rafCallbacks.length;
+            rafCallbacks.push(cb);
+            return id;
+        });
+        globalThis.cancelAnimationFrame = jest.fn((id) => {
+            rafCallbacks[id] = null;
+        });
+    });
+
+    afterEach(() => {
+        document.body.innerHTML = '';
+        globalThis.requestAnimationFrame = originalRAF;
+        globalThis.cancelAnimationFrame = originalCAF;
+    });
+
+    test('_scheduleTransform() calls requestAnimationFrame', () => {
+        const renderer = new SVGMapRenderer(container);
+        renderer._scheduleTransform();
+        expect(globalThis.requestAnimationFrame).toHaveBeenCalledTimes(1);
+    });
+
+    test('calling _scheduleTransform() twice schedules only one RAF', () => {
+        const renderer = new SVGMapRenderer(container);
+        renderer._scheduleTransform();
+        renderer._scheduleTransform();
+        expect(globalThis.requestAnimationFrame).toHaveBeenCalledTimes(1);
+    });
+
+    test('_rafId is null after RAF fires', () => {
+        const renderer = new SVGMapRenderer(container);
+        renderer._scheduleTransform();
+        expect(renderer._rafId).not.toBeNull();
+        // fire the RAF callback
+        rafCallbacks[0]();
+        expect(renderer._rafId).toBeNull();
+    });
+
+    test('destroy() cancels pending RAF', () => {
+        const renderer = new SVGMapRenderer(container);
+        renderer._scheduleTransform();
+        const pendingId = renderer._rafId;
+        renderer.destroy();
+        expect(globalThis.cancelAnimationFrame).toHaveBeenCalledWith(pendingId);
+    });
+
+    test('destroy() with no pending RAF does not call cancelAnimationFrame', () => {
+        const renderer = new SVGMapRenderer(container);
+        renderer.destroy();
+        expect(globalThis.cancelAnimationFrame).not.toHaveBeenCalled();
     });
 });

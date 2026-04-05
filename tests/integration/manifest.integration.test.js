@@ -101,20 +101,21 @@ describe('Manifest Configuration', () => {
         test('should NOT have overly broad https://*/* permission', () => {
             expect(manifest.host_permissions).not.toContain('https://*/*');
         });
+
+        test('should allow textadventures.co.uk access (Phase 9)', () => {
+            expect(manifest.host_permissions).toContain('https://textadventures.co.uk/*');
+        });
+
+        test('should allow ifcomp.org access (Phase 9)', () => {
+            expect(manifest.host_permissions).toContain('https://ifcomp.org/*');
+        });
     });
 
     describe('Security Hardening', () => {
-        test('web_accessible_resources should NOT use <all_urls>', () => {
-            manifest.web_accessible_resources.forEach((entry) => {
-                expect(entry.matches).not.toContain('<all_urls>');
-            });
-        });
-
-        test('web_accessible_resources matches should be scoped to iplayif.com', () => {
+        test('web_accessible_resources uses <all_urls> to support manual enable on arbitrary pages', () => {
+            // Phase 9: broadened from iplayif.com-only to support "Enable on this page" feature
             const entry = manifest.web_accessible_resources[0];
-            entry.matches.forEach((pattern) => {
-                expect(pattern).toMatch(/iplayif\.com/);
-            });
+            expect(entry.matches).toContain('<all_urls>');
         });
 
         test('should define a content_security_policy', () => {
