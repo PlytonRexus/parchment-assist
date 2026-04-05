@@ -181,7 +181,7 @@ jobs:
           else
             NOTES="Release version $VERSION
 
-See [CHANGELOG.md](https://github.com/PlytonRexus/parchment-assist/blob/main/CHANGELOG.md) for details."
+            See [CHANGELOG.md](https://github.com/PlytonRexus/parchment-assist/blob/main/CHANGELOG.md) for details."
             echo "No changelog entry found, using default notes"
           fi
 

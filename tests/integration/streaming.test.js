@@ -4,7 +4,7 @@
  */
 
 import { jest } from '@jest/globals';
-import { LLMService, RateLimiter } from '../../src/background/service-worker.js';
+import { LLMService } from '../../src/background/service-worker.js';
 
 describe('Streaming Integration', () => {
     let llmService;

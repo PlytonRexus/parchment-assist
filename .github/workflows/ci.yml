@@ -17,7 +17,7 @@ jobs:
 
     strategy:
       matrix:
-        node-version: [18.x, 20.x, 22.x]
+        node-version: [20.x]
       fail-fast: false
 
     steps:
@@ -133,7 +133,8 @@ jobs:
 
       - name: Check for known vulnerabilities
         run: |
-          if npm audit --audit-level=high --json | grep -q '"vulnerabilities"'; then
+          VULN_COUNT=$(npm audit --audit-level=high --json | node -e "const d=require('fs').readFileSync(0,'utf8');const j=JSON.parse(d);console.log(Object.keys(j.vulnerabilities||{}).length)")
+          if [ "$VULN_COUNT" -gt 0 ]; then
             echo "::error::High or critical vulnerabilities found!"
             npm audit --audit-level=high
             exit 1

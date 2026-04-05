@@ -3,7 +3,6 @@
  * Tests the service worker's LLM integration without making actual API calls
  */
 
-import { jest } from '@jest/globals';
 import { LLMService, RateLimiter } from '../../src/background/service-worker.js';
 
 describe('LLM Service Integration', () => {
