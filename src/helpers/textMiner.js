@@ -1605,10 +1605,33 @@ export class AdvancedGameStateExtractor {
         return !nonNpcWords.includes(text);
     }
 
+    // Directions safe to extract from prose (excludes in/out/enter/exit — too noisy)
+    static _PROSE_DIRECTIONS = [
+        'north',
+        'south',
+        'east',
+        'west',
+        'up',
+        'down',
+        'northeast',
+        'northwest',
+        'southeast',
+        'southwest',
+    ];
+
+    // Words that signal a sentence is describing an exit or traversable passage.
+    // Note: "winds" (verb, not "wind" the noun) to avoid matching "north wind".
+    static _SPATIAL_INDICATORS =
+        /\b(?:leads?|opens?|goes|going|go|continues?|runs?|extends?|winds|climbs?|descends?|ascends?|leading|lies|passage|passageway|passages|path|pathway|doorway|door|staircase|stairway|stairs|corridor|tunnel|alley|lane|archway|gate|exit|entrance|road|trail|track|chimney)\b/i;
+
+    // High-confidence "to the [direction]" pattern — reliable exit indicator in IF prose
+    static _TO_THE_DIRECTION =
+        /\bto the\s+(north|south|east|west|northeast|northwest|southeast|southwest)\b/i;
+
     static extractExits(gameText) {
         const exits = new Set();
 
-        // Look for exit patterns
+        // Phase 1: Explicit exit-listing patterns (e.g. "Obvious exits are north and east")
         const exitPatterns = [
             /You can (?:go |see exits? )?(north|south|east|west|up|down|northeast|northwest|southeast|southwest|in|out)/gi,
             /Obvious exits? (?:are |lead )?([^.\n]+)/gi,
@@ -1624,7 +1647,51 @@ export class AdvancedGameStateExtractor {
             }
         }
 
+        // Phase 2: Prose-based sentence scanner for natural room descriptions
+        this._extractProseExits(gameText, exits);
+
         return Array.from(exits);
+    }
+
+    /**
+     * Scan sentences in room description prose for exit-indicating language.
+     * A sentence qualifies if it contains either:
+     *   - the high-confidence "to the [direction]" phrase, OR
+     *   - a spatial indicator word (movement verb or structural noun)
+     * Qualifying sentences are scanned for direction words.
+     */
+    static _extractProseExits(gameText, exits) {
+        // Collapse line-wrapping (single newlines) into spaces so that
+        // "to the\nnorth" stays in one sentence. Preserve paragraph breaks (blank lines).
+        const normalized = gameText.replace(/([^\n])\n(?!\n)/g, '$1 ');
+        const sentences = normalized.split(/[.;]+/);
+
+        for (const sentence of sentences) {
+            const trimmed = sentence.trim();
+            if (!trimmed || trimmed.length < 5) {
+                continue;
+            }
+
+            const hasToTheDirection = this._TO_THE_DIRECTION.test(trimmed);
+            const hasIndicator = this._SPATIAL_INDICATORS.test(trimmed);
+
+            if (!hasToTheDirection && !hasIndicator) {
+                continue;
+            }
+
+            for (const dir of this._PROSE_DIRECTIONS) {
+                if (new RegExp(`\\b${dir}\\b`, 'i').test(trimmed)) {
+                    exits.add(dir);
+                }
+            }
+            // Map directional variants
+            if (/\bupwards?\b/i.test(trimmed)) {
+                exits.add('up');
+            }
+            if (/\bdownwards?\b/i.test(trimmed)) {
+                exits.add('down');
+            }
+        }
     }
 
     static parseDirections(text) {
@@ -1645,7 +1712,17 @@ export class AdvancedGameStateExtractor {
             'exit',
         ];
 
-        return directions.filter((dir) => new RegExp(`\\b${dir}\\b`, 'i').test(text));
+        const found = directions.filter((dir) => new RegExp(`\\b${dir}\\b`, 'i').test(text));
+
+        // Map directional variants to their canonical form
+        if (!found.includes('up') && /\bupwards?\b/i.test(text)) {
+            found.push('up');
+        }
+        if (!found.includes('down') && /\bdownwards?\b/i.test(text)) {
+            found.push('down');
+        }
+
+        return found;
     }
 
     static extractRoomDescription(lines) {

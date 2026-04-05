@@ -461,4 +461,207 @@ which lies to the east. A narrow, garbage-choked alley opens to the southeast.`;
             expect(names).not.toContain('garbage-choked alley');
         });
     });
+
+    describe('extractExits', () => {
+        // --- Regression: existing explicit patterns still work ---
+        it('should extract from "You can go north"', () => {
+            const exits = AdvancedGameStateExtractor.extractExits('You can go north.');
+            expect(exits).toContain('north');
+        });
+
+        it('should extract from "Obvious exits are north and east"', () => {
+            const exits = AdvancedGameStateExtractor.extractExits(
+                'Obvious exits are north and east.'
+            );
+            expect(exits).toContain('north');
+            expect(exits).toContain('east');
+        });
+
+        it('should extract from "Exits: north, south, west"', () => {
+            const exits = AdvancedGameStateExtractor.extractExits('Exits: north, south, west');
+            expect(exits).toContain('north');
+            expect(exits).toContain('south');
+            expect(exits).toContain('west');
+        });
+
+        // --- Prose pattern: [structure] leads/opens to the [direction] ---
+        it('should extract from "A path leads into the forest to the east"', () => {
+            const exits = AdvancedGameStateExtractor.extractExits(
+                'A path leads into the forest to the east.'
+            );
+            expect(exits).toContain('east');
+        });
+
+        it('should extract from "A passage leads to the west"', () => {
+            const exits = AdvancedGameStateExtractor.extractExits('A passage leads to the west.');
+            expect(exits).toContain('west');
+        });
+
+        it('should extract from "A narrow alley opens to the southeast"', () => {
+            const exits = AdvancedGameStateExtractor.extractExits(
+                'A narrow, garbage-choked alley opens to the southeast.'
+            );
+            expect(exits).toContain('southeast');
+        });
+
+        it('should extract from "a twisting lane leads up a hill to the northwest"', () => {
+            const exits = AdvancedGameStateExtractor.extractExits(
+                'a twisting lane leads up a hill to the northwest.'
+            );
+            expect(exits).toContain('northwest');
+        });
+
+        // --- Prose pattern: [something] lies to the [direction] ---
+        it('should extract from "which lies to the east"', () => {
+            const exits = AdvancedGameStateExtractor.extractExits('The office lies to the east.');
+            expect(exits).toContain('east');
+        });
+
+        it('should extract from "Your front garden lies to the south"', () => {
+            const exits = AdvancedGameStateExtractor.extractExits(
+                'Your front garden lies to the south.'
+            );
+            expect(exits).toContain('south');
+        });
+
+        // --- Prose pattern: "To the [direction], [description]" ---
+        it('should extract from "To the north, a gap in the buildings"', () => {
+            const exits = AdvancedGameStateExtractor.extractExits(
+                'To the north, a gap in the crowded press of buildings opens onto a lane.'
+            );
+            expect(exits).toContain('north');
+        });
+
+        it('should extract from "To the south, a side street leads across"', () => {
+            const exits = AdvancedGameStateExtractor.extractExits(
+                'To the south, a side street leads across the bridge.'
+            );
+            expect(exits).toContain('south');
+        });
+
+        // --- Prose pattern: "leading [direction]" ---
+        it('should extract from "passages leading northwest and east"', () => {
+            const exits = AdvancedGameStateExtractor.extractExits(
+                'There are passages leading northwest and east.'
+            );
+            expect(exits).toContain('northwest');
+            expect(exits).toContain('east');
+        });
+
+        it('should extract from "a narrow passageway leading north"', () => {
+            const exits = AdvancedGameStateExtractor.extractExits(
+                'A narrow passageway leading north.'
+            );
+            expect(exits).toContain('north');
+        });
+
+        // --- Prose pattern: "go/goes/going [direction]" ---
+        it('should extract from "Tunnel keep going out to east and west"', () => {
+            const exits = AdvancedGameStateExtractor.extractExits(
+                'Tunnel keep going out to east and west, but normal doorway go north.'
+            );
+            expect(exits).toContain('east');
+            expect(exits).toContain('west');
+            expect(exits).toContain('north');
+        });
+
+        // --- Prose pattern: door/structure at [direction] ---
+        it('should extract from "At the south end of the room is an open door"', () => {
+            const exits = AdvancedGameStateExtractor.extractExits(
+                'At the south end of the room is an open door.'
+            );
+            expect(exits).toContain('south');
+        });
+
+        // --- Multi-direction conjunctions ---
+        it('should extract from "paths to the northeast and northwest"', () => {
+            const exits = AdvancedGameStateExtractor.extractExits(
+                'Narrow paths wind away to the northeast and northwest.'
+            );
+            expect(exits).toContain('northeast');
+            expect(exits).toContain('northwest');
+        });
+
+        // --- Upward/downward mapping ---
+        it('should map "upward" to "up"', () => {
+            const exits = AdvancedGameStateExtractor.extractExits(
+                'A dark staircase can be seen leading upward.'
+            );
+            expect(exits).toContain('up');
+        });
+
+        it('should map "downward" to "down"', () => {
+            const exits = AdvancedGameStateExtractor.extractExits(
+                'A stairway descends downward into darkness.'
+            );
+            expect(exits).toContain('down');
+        });
+
+        // --- False positive suppression ---
+        it('should NOT extract from "The north wind howls through the chamber"', () => {
+            const exits = AdvancedGameStateExtractor.extractExits(
+                'The north wind howls through the chamber.'
+            );
+            expect(exits).not.toContain('north');
+        });
+
+        it('should NOT extract from "On the east wall is an ancient inscription"', () => {
+            const exits = AdvancedGameStateExtractor.extractExits(
+                'On the east wall is an ancient inscription.'
+            );
+            expect(exits).not.toContain('east');
+        });
+
+        it('should NOT extract "in" from prose like "In the corner of the room"', () => {
+            const exits = AdvancedGameStateExtractor.extractExits(
+                'In the corner of the room, you see a table.'
+            );
+            expect(exits).not.toContain('in');
+        });
+
+        it('should NOT extract "out" from "You step out of the shadows"', () => {
+            const exits = AdvancedGameStateExtractor.extractExits('You step out of the shadows.');
+            expect(exits).not.toContain('out');
+        });
+
+        // --- Integration: real game text ---
+        it('should extract east, west, southeast from Anchorhead opening', () => {
+            const text = `Outside the Real Estate Office
+A grim little cul-de-sac, tucked away in a corner of the claustrophobic tangle
+of narrow, twisting avenues that largely constitute the older portion of
+Anchorhead. Like most of the streets in this city, it is ancient, shadowy, and
+leads essentially nowhere. The lane ends here at the real estate agent's office,
+which lies to the east, and winds its way back toward the center of town to the
+west. A narrow, garbage-choked alley opens to the southeast.`;
+            const exits = AdvancedGameStateExtractor.extractExits(text);
+            expect(exits).toContain('east');
+            expect(exits).toContain('west');
+            expect(exits).toContain('southeast');
+        });
+
+        it('should extract west, up, down, east from Zork Kitchen', () => {
+            const text =
+                'You are in the kitchen of the white house. A table seems to have been used recently for the preparation of food. A passage leads to the west and a dark staircase can be seen leading upward. A dark chimney leads down and to the east is a small window which is open.';
+            const exits = AdvancedGameStateExtractor.extractExits(text);
+            expect(exits).toContain('west');
+            expect(exits).toContain('up');
+            expect(exits).toContain('down');
+            expect(exits).toContain('east');
+        });
+
+        it('should extract from Anchorhead Narrow Street', () => {
+            const text = `Narrow Street
+As the lane winds along from east to west, it narrows until the steep, jagged
+rooftops on either side of the street practically touch each other. To the
+south, a side street leads across Whateley Bridge toward the center of town, and
+a twisting lane leads up a hill to the northwest. A short flight of steps to the
+north leads down to the local watering hole.`;
+            const exits = AdvancedGameStateExtractor.extractExits(text);
+            expect(exits).toContain('east');
+            expect(exits).toContain('west');
+            expect(exits).toContain('south');
+            expect(exits).toContain('northwest');
+            expect(exits).toContain('north');
+        });
+    });
 });
